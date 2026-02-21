@@ -201,63 +201,57 @@ with tabs[0]:
 
     if uploaded_file is not None:
         try:
-            # Display uploaded image
+            # Save temporarily
             image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded Image", use_column_width=True)
-            
-            # Save temporarily and analyze
             temp_path = f"/tmp/{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             
-            # Analyze
+            # Analyze with spinner right under input columns
             with st.spinner("Analyzing image..."):
                 result = analyze_image_for_scams(temp_path, use_gpu=use_gpu)
             
-            # Display results
-            st.divider()
-            
             if result["success"]:
-                # Scam Score - Large and prominent
-                st.subheader("Results")
+                # Two-column layout: Results (left) | Image (right)
+                result_col, image_col = st.columns([1.5, 1])
                 
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Color code the score
+                with result_col:
+                    # Scam Score
                     score = result["scam_score"]
                     if score >= 70:
-                        color = "🔴"  # Red - High risk
                         risk_level = "HIGH RISK"
                     elif score >= 40:
-                        color = "🟡"  # Yellow - Medium risk
                         risk_level = "MEDIUM RISK"
                     else:
-                        color = "🟢"  # Green - Low risk
                         risk_level = "LOW RISK"
                     
                     st.metric("Scam Score", f"{score}/100", delta=risk_level)
-                
-                with col2:
+                    
+                    # Scam Types
+                    st.subheader("Scam Type(s)")
                     scam_types = result["scam_types"]
                     types_text = ", ".join(scam_types) if scam_types else "None detected"
-                    st.metric("Scam Type(s)", types_text)
+                    st.write(types_text)
+                    
+                    # Detected Red Flags
+                    st.subheader("Detected Red Flags")
+                    if result["flags"]:
+                        for flag in result["flags"]:
+                            st.warning(f"⚠️ {flag}")
+                    else:
+                        st.info("No suspicious indicators detected.")
+                
+                with image_col:
+                    st.subheader("Uploaded Image")
+                    st.image(image, use_column_width=True)
+                
+                # Bottom: OCR Confidence
+                st.subheader("OCR Confidence")
+                st.progress(result["confidence"], text=f"{result['confidence']:.1%}")
                 
                 # Extracted Text
                 st.subheader("Extracted Text")
                 st.text_area("Text from image:", value=result["extracted_text"], height=150, disabled=True)
-                
-                # Detected Flags
-                if result["flags"]:
-                    st.subheader("Detected Red Flags")
-                    for flag in result["flags"]:
-                        st.warning(f"⚠️ {flag}")
-                else:
-                    st.info("No suspicious indicators detected.")
-                
-                # OCR Confidence
-                st.subheader("OCR Confidence")
-                st.progress(result["confidence"], text=f"{result['confidence']:.1%}")
                 
                 # Save to alerts
                 entry = {
