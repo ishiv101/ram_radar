@@ -3,3 +3,5 @@ import cv2
 import numpy as np
 from typing import List, Tuple, Any
 from pathlib import Path
+
+"""Utility functions for scam detection and analysis."""
