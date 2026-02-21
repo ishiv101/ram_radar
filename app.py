@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 # Page config + styling
 # -----------------------------
 st.set_page_config(
-    page_title="Campus Scam Signal",
+    page_title="Ram Radar",
     page_icon="🚨",
     layout="wide",
 )
@@ -126,31 +126,23 @@ def end_card():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# -----------------------------
-# Sidebar navigation
-# -----------------------------
-st.sidebar.markdown("## 🚨 Campus Scam Signal")
-st.sidebar.caption("UNC-style scam detection + campus-wide alerting (hackathon demo).")
-
-viewer_id = st.sidebar.text_input("Viewer ID (for analytics)", value="anon_viewer")
-
-page = st.sidebar.radio(
-    "Navigate",
-    ["Report a message", "Active alerts", "Dashboard", "How it works"],
-    index=0,
-)
-
-st.sidebar.markdown("---")
-st.sidebar.caption("⚠️ This tool provides *risk signals*, not definitive conclusions.")
+# Top header + viewer id input (no sidebar)
+import os
+import json
+from pathlib import Path
+from PIL import Image
+cols = st.columns([3, 1])
+with cols[0]:
+    st.markdown("## 🚨 Ram Radar")
+with cols[1]:
+    viewer_id = st.text_input("Viewer ID", value="anon_viewer")
+st.markdown("---")
 
 
 # -----------------------------
 # Main area: two tabs (Report / Active alerts)
 # -----------------------------
-import os
-import json
-from pathlib import Path
-from PIL import Image
+
 
 try:
     # prefer importing project config; falls back to src.config if run from project root
@@ -238,9 +230,11 @@ def save_alert(entry: dict):
 
 
 # Use sidebar `page` radio to control what the main area shows
-if page == "Report a message":
+tabs = st.tabs(["Report a message", "Active alerts"])
+
+with tabs[0]:
     st.header("Report a message")
-    st.markdown("Use this page to paste suspicious message text or upload a screenshot.")
+    st.markdown("Use this tab to paste suspicious message text or upload a screenshot.")
 
     with st.form("report_form"):
         provided_text = st.text_area("Message text (paste or leave empty to OCR an image)", height=200)
@@ -293,7 +287,7 @@ if page == "Report a message":
             except Exception as e:
                 st.error(f"Failed to save report: {e}")
 
-elif page == "Active alerts":
+with tabs[1]:
     st.header("Active alerts")
     st.markdown("Recent reported messages (local).")
     alerts = load_alerts()
@@ -305,178 +299,3 @@ elif page == "Active alerts":
             st.write(a.get("text"))
             render_flags(a.get("flags", []))
             end_card()
-
-elif page == "Dashboard":
-    st.header("Dashboard")
-    st.markdown("Quick summary of recent reports.")
-    alerts = load_alerts()
-    total = len(alerts)
-    avg = round(sum((a.get("score", 0) for a in alerts), 0) / total, 1) if total else 0
-    st.metric("Total reports", total)
-    st.metric("Average score", f"{avg}")
-
-    if alerts:
-        top = sorted(alerts, key=lambda x: x.get("score", 0), reverse=True)[:5]
-        st.subheader("Top recent high-risk reports")
-        for a in top:
-            card(f"Score: {a.get('score', 0)}", subtitle=a.get("timestamp"))
-            st.write(a.get("text"))
-            render_flags(a.get("flags", []))
-            end_card()
-
-elif page == "How it works":
-    st.header("How it works")
-    st.markdown(
-        """
-        This demo extracts text from images or pasted messages, runs a lightweight heuristic
-        analysis using configured keyword weights, and surfaces risk signals.
-
-        - "Report a message": paste text or upload a screenshot to analyze and save a report.
-        - "Active alerts": list recently saved reports.
-        - "Dashboard": simple aggregates of recent reports.
-
-        Notes: This is a demo and provides risk signals, not definitive evidence.
-        """,
-    )
-
-else:
-    st.info("Select a page from the sidebar to get started.")
-
-# Page config + styling
-
-st.set_page_config(
-    page_title="Campus Scam Signal",
-    page_icon="🚨",
-    layout="wide",
-)
-
-CSS = """
-<style>
-/* Layout polish */
-.block-container { padding-top: 1.5rem; padding-bottom: 2.0rem; }
-h1, h2, h3 { letter-spacing: -0.02em; }
-
-/* Card look */
-.card {
-  border: 1px solid rgba(49, 51, 63, 0.15);
-  border-radius: 16px;
-  padding: 16px 16px;
-  background: rgba(255,255,255,0.7);
-  margin-bottom: 12px;
-}
-.card-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
-.small-muted { color: rgba(49,51,63,0.65); font-size: 13px; }
-
-/* Badges */
-.badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  border: 1px solid rgba(49, 51, 63, 0.15);
-  margin: 4px 6px 0 0;
-}
-.badge-red { background: rgba(255, 227, 227, 0.9); }
-.badge-yellow { background: rgba(255, 243, 191, 0.9); }
-.badge-green { background: rgba(211, 249, 216, 0.9); }
-.badge-gray { background: rgba(241, 243, 245, 0.9); }
-
-/* Risk pill */
-.risk-pill {
-  display:inline-block; padding:6px 10px; border-radius:999px;
-  font-weight:700; font-size:12px; border:1px solid rgba(49,51,63,0.15);
-}
-
-/* Top alert banner */
-.banner {
-  border-radius: 16px;
-  padding: 14px 16px;
-  border: 1px solid rgba(49, 51, 63, 0.15);
-  margin-bottom: 16px;
-}
-.banner-danger { background: rgba(255, 227, 227, 0.7); }
-.banner-info { background: rgba(231, 245, 255, 0.7); }
-.banner-ok { background: rgba(211, 249, 216, 0.7); }
-
-/* Button row */
-.btnrow { display:flex; gap:8px; flex-wrap: wrap; }
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
-
-
-# -----------------------------
-# Helpers (UI)
-# -----------------------------
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def risk_label(score: int) -> Dict[str, str]:
-    if score >= 70:
-        return {"label": "HIGH", "cls": "badge-red"}
-    if score >= 40:
-        return {"label": "MEDIUM", "cls": "badge-yellow"}
-    return {"label": "LOW", "cls": "badge-green"}
-
-
-def pill_html(text: str, cls: str) -> str:
-    return f'<span class="badge {cls}">{text}</span>'
-
-
-def render_flags(flags: List[str]):
-    if not flags:
-        st.markdown(pill_html("No major red flags detected", "badge-green"), unsafe_allow_html=True)
-        return
-    # heuristic coloring
-    for f in flags:
-        lc = f.lower()
-        if any(k in lc for k in ["credential", "password", "ssn", "payment", "gift", "wire", "urgent", "non-unc", "spoof"]):
-            cls = "badge-red"
-        elif any(k in lc for k in ["link", "domain", "capital"]):
-            cls = "badge-yellow"
-        else:
-            cls = "badge-gray"
-        st.markdown(pill_html(f, cls), unsafe_allow_html=True)
-
-
-def banner(kind: str, title: str, body: str):
-    cls = {"danger": "banner-danger", "info": "banner-info", "ok": "banner-ok"}.get(kind, "banner-info")
-    st.markdown(
-        f"""
-        <div class="banner {cls}">
-          <div style="font-weight:800; font-size:16px; margin-bottom:4px;">{title}</div>
-          <div class="small-muted">{body}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def card(title: str, subtitle: Optional[str] = None):
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(f'<div class="card-title">{title}</div>', unsafe_allow_html=True)
-    if subtitle:
-        st.markdown(f'<div class="small-muted" style="margin-bottom:10px;">{subtitle}</div>', unsafe_allow_html=True)
-
-
-def end_card():
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-# -----------------------------
-# Sidebar navigation
-# -----------------------------
-st.sidebar.markdown("## 🚨 Campus Scam Signal")
-st.sidebar.caption("UNC-style scam detection + campus-wide alerting (hackathon demo).")
-
-viewer_id = st.sidebar.text_input("Viewer ID (for analytics)", value="anon_viewer")
-
-page = st.sidebar.radio(
-    "Navigate",
-    ["Report a message", "Active alerts", "Dashboard", "How it works"],
-    index=0,
-)
-
-st.sidebar.markdown("---")
-st.sidebar.caption("⚠️ This tool provides *risk signals*, not definitive conclusions.")
