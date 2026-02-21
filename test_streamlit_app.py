@@ -112,19 +112,42 @@ try:
         AlertEngine = _ae_mod.AlertEngine
     except Exception:
         from alert.alert_engine import AlertEngine
-
     st.sidebar.header("AlertEngine Tester")
     _threshold = st.sidebar.number_input("Threshold", min_value=1, max_value=100, value=5)
-    _repeat = st.sidebar.number_input("Repeat events", min_value=1, max_value=100, value=5)
-    _flag = st.sidebar.text_input("Flag text", value="Fake UNC email domain")
+    _entries = st.sidebar.text_area(
+        "Enter scam types and counts (one per line: type,count)",
+        value="Fake UNC email domain,6\nPayment fraud,3"
+    )
     _send = st.sidebar.checkbox("Call send_alert()", value=False)
 
     if st.sidebar.button("Run AlertEngine Demo"):
         engine = AlertEngine(threshold=int(_threshold))
-        flags = [_flag]
-        for _ in range(int(_repeat)):
-            engine.add_event(flags)
 
+        # Parse user entries
+        lines = [l.strip() for l in _entries.splitlines() if l.strip()]
+        parsed = []  # list of (type, count)
+        for line in lines:
+            if "," in line:
+                t, c = line.split(",", 1)
+            elif ":" in line:
+                t, c = line.split(":", 1)
+            else:
+                t, c = line, "1"
+            try:
+                count = int(c.strip())
+            except Exception:
+                count = 1
+            parsed.append((t.strip(), count))
+
+        # Feed events into the engine
+        for scam_type, count in parsed:
+            for _ in range(max(0, int(count))):
+                try:
+                    engine.add_event([scam_type])
+                except Exception as e:
+                    st.sidebar.error(f"add_event failed: {e}")
+
+        # Retrieve and display alerts (only types meeting threshold)
         alerts = engine.get_all_alerts()
         if alerts:
             st.sidebar.success("Alerts triggered")
