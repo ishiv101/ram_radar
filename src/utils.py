@@ -94,3 +94,36 @@ def analyze_image_for_scams(
             "confidence": 0.0,
             "error": f"Pipeline error: {str(e)}"
         }
+
+def analyze_text_for_scams(text: str) -> Dict[str, Any]:
+    """
+    Analyze a given text string for scam indicators and categorize the type of scam detected.
+    
+    Args:
+        text: The text to analyze for scams"""
+    try:
+        # Step 1: Analyze text for scam indicators
+        analysis_result = calculate_scam_score(text)
+        scam_score = analysis_result["score"]
+        flags = analysis_result["flags"]
+        
+        # Step 2: Categorize scam type based on detected flags
+        grouper = ScamGrouper()
+        scam_types = grouper.detect_scam_type(flags)
+        
+        return {
+            "success": True,
+            "scam_score": scam_score,
+            "scam_types": scam_types,
+            "flags": flags,
+            "error": None
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "scam_score": 0,
+            "scam_types": set(),
+            "flags": [],
+            "error": f"Text analysis error: {str(e)}"
+        }

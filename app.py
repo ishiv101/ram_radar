@@ -2,7 +2,13 @@
 
 import streamlit as st
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
+import os
+import json
+from pathlib import Path
+from PIL import Image
+from src.utils import analyze_image_for_scams, analyze_text_for_scams
+
 
 # Page config + styling
 # -----------------------------
@@ -127,10 +133,6 @@ def end_card():
 
 
 # Top header (no sidebar)
-import os
-import json
-from pathlib import Path
-from PIL import Image
 st.markdown("## 🚨 Ram Radar")
 st.markdown("---")
 
@@ -145,9 +147,6 @@ try:
     import src.config as cfg
 except Exception:
     import config as cfg
-
-from src.utils import analyze_image_for_scams
-
 
 def _scams_file_path() -> Path:
     d = Path(getattr(cfg, "DATA_DIR", "data"))
@@ -179,6 +178,8 @@ with tabs[0]:
     st.title("🚨 Scam Detection Tool")
     st.write("Upload an image of a potential scam message to analyze it for suspicious content.")
 
+    use_gpu = False  # GPU acceleration disabled by default
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -189,8 +190,14 @@ with tabs[0]:
         )
 
     with col2:
-        st.subheader("Options")
-        use_gpu = st.checkbox("Use GPU (if available)", value=False)
+        st.subheader("Paste Message Text")
+        text_input = st.text_area(
+            "Enter suspicious message text to analyze",
+            placeholder="Paste the scam message text here...",
+            height=150,
+            key="text_input_col"
+        )
+        analyze_text_btn = st.button("Analyze Text", key="analyze_text_btn_col")
 
     if uploaded_file is not None:
         try:
@@ -275,8 +282,71 @@ with tabs[0]:
             import traceback
             st.text(traceback.format_exc())
 
+    # Handle text input analysis from col2
+    if analyze_text_btn and text_input.strip():
+        try:
+            with st.spinner("Analyzing text..."):
+                result = analyze_text_for_scams(text_input)
+            
+            if result["success"]:
+                st.divider()
+                st.subheader("Results")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    score = result["scam_score"]
+                    if score >= 70:
+                        risk_level = "HIGH RISK"
+                    elif score >= 40:
+                        risk_level = "MEDIUM RISK"
+                    else:
+                        risk_level = "LOW RISK"
+                    
+                    st.metric("Scam Score", f"{score}/100", delta=risk_level)
+                
+                with col2:
+                    scam_types = result["scam_types"]
+                    types_text = ", ".join(scam_types) if scam_types else "None detected"
+                    st.metric("Scam Type(s)", types_text)
+                
+                # Analyzed Text
+                st.subheader("Analyzed Text")
+                st.text_area("Input text:", value=text_input, height=150, disabled=True, key="analyzed_text")
+                
+                # Detected Flags
+                if result["flags"]:
+                    st.subheader("Detected Red Flags")
+                    for flag in result["flags"]:
+                        st.warning(f"⚠️ {flag}")
+                else:
+                    st.info("No suspicious indicators detected.")
+                
+                # Save to alerts
+                entry = {
+                    "viewer_id": "anon_viewer",
+                    "timestamp": now_iso(),
+                    "text": text_input,
+                    "score": result["scam_score"],
+                    "flags": result["flags"],
+                    "scam_types": list(result["scam_types"]) if result["scam_types"] else [],
+                    "ocr_used": False,
+                }
+                try:
+                    save_alert(entry)
+                    st.success("Report saved locally to data directory.")
+                except Exception as e:
+                    st.error(f"Failed to save report: {e}")
+            else:
+                st.error(f"❌ Analysis Failed: {result['error']}")
+        
+        except Exception as e:
+            st.error(f"Error during analysis: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
+
     st.divider()
-    st.caption("This tool analyzes images for common scam indicators including phishing, payment fraud, and job scams.")
+    st.caption("This tool analyzes images and text for common scam indicators including phishing, payment fraud, and job scams.")
 
 with tabs[1]:
     st.header("Active alerts")
