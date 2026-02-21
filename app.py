@@ -302,6 +302,48 @@ with tabs[1]:
 
 
 # --- AlertEngine Streamlit integration (appended; does not modify existing UI) ---
+st.markdown("---")
+st.header("Alert System Tester")
+
+try:
+    import importlib
+    try:
+        import alert.alert_engine as _ae_mod
+        importlib.reload(_ae_mod)
+        AlertEngine = _ae_mod.AlertEngine
+    except Exception:
+        from alert.alert_engine import AlertEngine
+
+    # Use ScamGrouper to get scam types
+    try:
+        from src.scam_grouper import ScamGrouper
+        grouper = ScamGrouper()
+        scam_types = list(grouper.SCAM_TYPES.keys())
+    except Exception:
+        scam_types = ["phishing", "payment_fraud", "campus_sale", "job_scam", "domain_spoofing"]
+
+    selected_types = st.multiselect("Select scam group(s)", options=scam_types, default=[scam_types[0]] if scam_types else [])
+    count = st.number_input("Instances per group", min_value=1, max_value=100, value=1)
+    threshold = st.number_input("Alert threshold", min_value=1, max_value=100, value=5)
+    run_demo = st.button("Run AlertEngine Test")
+
+    if run_demo:
+        engine = AlertEngine(threshold=int(threshold))
+        for scam_type in selected_types:
+            for _ in range(int(count)):
+                try:
+                    engine.add_event([scam_type])
+                except Exception as e:
+                    st.error(f"add_event failed: {e}")
+        alerts = engine.get_all_alerts()
+        if alerts:
+            st.success("Alerts triggered:")
+            for k, v in alerts.items():
+                st.write(f"- {k}: {v}")
+        else:
+            st.info("No alerts triggered.")
+except Exception:
+    st.warning("AlertEngine or ScamGrouper unavailable.")
 try:
     import importlib
     # Attempt to import the AlertEngine module and reload to pick up local edits

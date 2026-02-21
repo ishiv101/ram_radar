@@ -21,7 +21,10 @@ class AlertEngine:
         """
         self.threshold = threshold
         self.db = ScamDatabase(db_path)
-        self.active_alerts = {}  # Track which alerts have been sent
+        from src.scam_grouper import ScamGrouper
+        self.grouper = ScamGrouper()
+        self.type_counts = {}
+        self.alerts = {}
     
     def add_event(self, flags: list) -> None:
         """
@@ -32,12 +35,13 @@ class AlertEngine:
         """
         scam_types = self.grouper.detect_scam_type(flags)
         for scam_type in scam_types:
+            if scam_type not in self.type_counts:
+                self.type_counts[scam_type] = 0
             self.type_counts[scam_type] += 1
-
             # If count reached threshold and we haven't alerted yet, create alert
             if self.type_counts[scam_type] >= self.threshold and scam_type not in self.alerts:
                 self.alerts[scam_type] = self.type_counts[scam_type]
-                self.send_alert(scam_type)
+                self.send_alert(scam_type, self.type_counts[scam_type])
 
         # Build and return a snapshot of all scam group counts and alerts above threshold
         counts_snapshot: Dict[str, int] = dict(self.type_counts)
