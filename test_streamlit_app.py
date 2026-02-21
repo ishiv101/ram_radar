@@ -101,3 +101,44 @@ if uploaded_file is not None:
 
 st.divider()
 st.caption("This tool analyzes images for common scam indicators including phishing, payment fraud, and job scams.")
+
+# --- AlertEngine Streamlit integration (appended; does not modify existing UI) ---
+try:
+    import importlib
+    # Attempt to import the AlertEngine module and reload to pick up local edits
+    try:
+        import alert.alert_engine as _ae_mod
+        importlib.reload(_ae_mod)
+        AlertEngine = _ae_mod.AlertEngine
+    except Exception:
+        from alert.alert_engine import AlertEngine
+
+    st.sidebar.header("AlertEngine Tester")
+    _threshold = st.sidebar.number_input("Threshold", min_value=1, max_value=100, value=5)
+    _repeat = st.sidebar.number_input("Repeat events", min_value=1, max_value=100, value=5)
+    _flag = st.sidebar.text_input("Flag text", value="Fake UNC email domain")
+    _send = st.sidebar.checkbox("Call send_alert()", value=False)
+
+    if st.sidebar.button("Run AlertEngine Demo"):
+        engine = AlertEngine(threshold=int(_threshold))
+        flags = [_flag]
+        for _ in range(int(_repeat)):
+            engine.add_event(flags)
+
+        alerts = engine.get_all_alerts()
+        if alerts:
+            st.sidebar.success("Alerts triggered")
+            for k, v in alerts.items():
+                st.sidebar.write(f"- {k}: {v}")
+                if _send:
+                    try:
+                        engine.send_alert(k)
+                    except Exception as e:
+                        st.sidebar.error(f"send_alert failed: {e}")
+        else:
+            st.sidebar.info("No alerts triggered")
+except Exception:
+    # Keep the main app functional even if AlertEngine import fails
+    pass
+
+
