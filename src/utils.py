@@ -2,9 +2,9 @@ from typing import List, Optional, Any, Dict, Union
 from pathlib import Path
 from PIL import Image
 
-from ocr_extractor import ImageToText
-from scam_analyzer import calculate_scam_score
-from scam_grouper import ScamGrouper
+from src.ocr_extractor import ImageToText
+from src.scam_analyzer import calculate_scam_score
+from src.scam_grouper import ScamGrouper
 
 """Utility functions for scam detection and analysis."""
 

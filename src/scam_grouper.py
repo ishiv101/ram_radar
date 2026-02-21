@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Optional, Set
 from fuzzywuzzy import fuzz
 from src.config import FUZZY_MATCH_THRESHOLD
 
@@ -84,7 +84,7 @@ class ScamGrouper:
         return {k: v for k, v in grouped.items() if v}
     
     def find_similar_scams(self, scam_text: str, scam_list: List[str], 
-                          threshold: int = None) -> List[Dict[str, Any]]:
+                          threshold: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Find similar scams using fuzzy matching.
         

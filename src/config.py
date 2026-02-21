@@ -2,11 +2,12 @@
 
 # High-risk phishing phrases
 PHISHING_KEYWORDS = [
-    "verify account", "confirm identity", "update payment",
-    "urgent action required", "suspicious activity",
-    "click here immediately", "validate account",
-    "account locked", "unauthorized access",
-    "re-activate account", "restore access"
+    "verify", "account", "confirm", "identity", "update", "payment",
+    "action required", "suspicious activity",
+    "click here immediately", "validate",
+    "locked", "unauthorized",
+    "re-activate", "restore access", "permanently", "permanently",
+    "security", "compromised", "password expired", "24 hours", "danger"
 ]
 
 # Payment-related (very high weight)
@@ -29,7 +30,8 @@ JOB_SCAM_KEYWORDS = [
     "remote job", "easy money", "weekly pay",
     "$500/week", "$300 weekly", "data entry",
     "personal assistant", "work from home",
-    "kindly", "flexible hours"
+    "kindly", "flexible hours", "contact", "professor"
+    "research assistant", "admin assistant", "no experience"
 ]
 
 # Suspicious domains (spoofing)
@@ -43,14 +45,14 @@ SUSPICIOUS_DOMAINS = [
 
 # Risk weights
 WEIGHTS = {
-    "phishing": 15,
+    "phishing": 20,
     "payment": 20,
-    "campus_sale": 10,
-    "job": 15,
+    "campus_sale": 20,
+    "job": 20,
     "suspicious_domain": 30,
-    "link": 15,
-    "urgency": 10,
-    "sale_payment_bonus": 15
+    "link": 30,
+    "urgency": 40,
+    "sale_payment_bonus": 50
 }
 
 # Risk thresholds

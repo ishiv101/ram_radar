@@ -1,5 +1,5 @@
 import re
-from config import (
+from src.config import (
     PHISHING_KEYWORDS,
     PAYMENT_KEYWORDS,
     CAMPUS_SALE_KEYWORDS,
