@@ -313,34 +313,25 @@ try:
         from alert.alert_engine import AlertEngine
     st.sidebar.header("AlertEngine Tester")
     _threshold = st.sidebar.number_input("Threshold", min_value=1, max_value=100, value=5)
-    _entries = st.sidebar.text_area(
-        "Enter scam types and counts (one per line: type,count)",
-        value="Fake UNC email domain,6\nPayment fraud,3"
-    )
     _send = st.sidebar.checkbox("Call send_alert()", value=False)
+
+    # Provide scam types from ScamGrouper so users can pick from known categories
+    try:
+        from src.scam_grouper import ScamGrouper
+        grouper = ScamGrouper()
+        available_types = list(grouper.SCAM_TYPES.keys())
+    except Exception:
+        available_types = ["unknown"]
+
+    _selected_types = st.sidebar.multiselect("Select scam type(s)", options=available_types, default=[available_types[0]] if available_types else [])
+    _count = st.sidebar.number_input("Count per selected type", min_value=1, max_value=100, value=1)
 
     if st.sidebar.button("Run AlertEngine Demo"):
         engine = AlertEngine(threshold=int(_threshold))
 
-        # Parse user entries
-        lines = [l.strip() for l in _entries.splitlines() if l.strip()]
-        parsed = []  # list of (type, count)
-        for line in lines:
-            if "," in line:
-                t, c = line.split(",", 1)
-            elif ":" in line:
-                t, c = line.split(":", 1)
-            else:
-                t, c = line, "1"
-            try:
-                count = int(c.strip())
-            except Exception:
-                count = 1
-            parsed.append((t.strip(), count))
-
-        # Feed events into the engine
-        for scam_type, count in parsed:
-            for _ in range(max(0, int(count))):
+        # Feed events into the engine based on selected types and count
+        for scam_type in _selected_types:
+            for _ in range(int(_count)):
                 try:
                     engine.add_event([scam_type])
                 except Exception as e:

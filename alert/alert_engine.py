@@ -20,7 +20,7 @@ class AlertEngine:
         self.alerts = {}  # Active alerts {scam_type: count}
         self.grouper = ScamGrouper()
     
-    def add_event(self, flags: list) -> None:
+    def add_event(self, flags: List[str]) -> Dict[str, Any]:
         """
         Add an event with flags and detect scam types.
         
@@ -28,7 +28,21 @@ class AlertEngine:
             flags: List of flag strings from scam analysis
             
         """
-        scam_types = self.grouper.detect_scam_type(flags)
+        # Normalize input to a list of strings
+        if isinstance(flags, str):
+            flags_list = [flags]
+        else:
+            flags_list = list(flags or [])
+
+        # First try to detect scam types from flags (usual path)
+        scam_types = self.grouper.detect_scam_type(flags_list)
+
+        # If detection returned unknown, allow callers to pass scam type names directly
+        # e.g., engine.add_event(["phishing"]) from the UI tester. Map those to known types.
+        if scam_types == {"unknown"}:
+            direct_types = {t for t in self.grouper.SCAM_TYPES.keys() if t in set(flags_list)}
+            if direct_types:
+                scam_types = direct_types
         for scam_type in scam_types:
             self.type_counts[scam_type] += 1
 
@@ -44,7 +58,7 @@ class AlertEngine:
         }
 
         return {"counts": counts_snapshot, "alerts": alerts_above_threshold}
-    
+
     def get_all_alerts(self):
         """Get all active alerts."""
         return {k: v for k, v in self.alerts.items() if v >= self.threshold}
