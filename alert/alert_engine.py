@@ -23,32 +23,33 @@ class AlertEngine:
         self.db = ScamDatabase(db_path)
         self.active_alerts = {}  # Track which alerts have been sent
     
-    def check_and_alert(self) -> Dict[str, int]:
+    def add_event(self, flags: list) -> None:
         """
         Check database for scam types exceeding threshold and send alerts.
         
         Returns:
             Dictionary of {scam_type: count} for types at or above threshold
         """
-        records = self.db.get_all_records()
-        scam_type_counts = {}
-        
-        # Count occurrences of each scam type across all records
-        for record in records:
-            for scam_type in record.scam_types:
-                scam_type_counts[scam_type] = scam_type_counts.get(scam_type, 0) + 1
-        
-        # Check for new alerts and send them
-        alerts = {}
-        for scam_type, count in scam_type_counts.items():
-            if count >= self.threshold:
-                alerts[scam_type] = count
-                # Send alert if not already sent for this type
-                if scam_type not in self.active_alerts or self.active_alerts[scam_type] < count:
-                    self.send_alert(scam_type, count)
-                    self.active_alerts[scam_type] = count
-        
-        return alerts
+        scam_types = self.grouper.detect_scam_type(flags)
+        for scam_type in scam_types:
+            self.type_counts[scam_type] += 1
+
+            # If count reached threshold and we haven't alerted yet, create alert
+            if self.type_counts[scam_type] >= self.threshold and scam_type not in self.alerts:
+                self.alerts[scam_type] = self.type_counts[scam_type]
+                self.send_alert(scam_type)
+
+        # Build and return a snapshot of all scam group counts and alerts above threshold
+        counts_snapshot: Dict[str, int] = dict(self.type_counts)
+        alerts_above_threshold: Dict[str, int] = {
+            k: v for k, v in counts_snapshot.items() if v >= self.threshold
+        }
+
+        return {"counts": counts_snapshot, "alerts": alerts_above_threshold}
+    
+    def get_all_alerts(self):
+        """Get all active alerts."""
+        return {k: v for k, v in self.alerts.items() if v >= self.threshold}
     
     def send_alert(self, scam_type: str, count: int):
         """

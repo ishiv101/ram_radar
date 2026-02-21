@@ -9,6 +9,7 @@ sys.path.insert(0, str(project_root))
 try:
     from PIL import Image
     from src.utils import analyze_image_for_scams
+    from src.scam_grouper import ScamGrouper
 except ImportError as e:
     st.error(f"Import Error: {e}")
     st.stop()
@@ -104,12 +105,51 @@ st.caption("This tool analyzes images for common scam indicators including phish
 
 # --- AlertEngine Streamlit integration (appended; does not modify existing UI) ---
 try:
-    from alert.alert_engine import AlertEngine
-    st.sidebar.header("AlertEngine Demo (Database-driven)")
-    threshold = st.sidebar.number_input("Alert Threshold", min_value=1, max_value=100, value=5)
-    if st.sidebar.button("Check Alerts"):
-        engine = AlertEngine(threshold=int(threshold))
-        alerts = engine.check_and_alert()
+    import importlib
+    # Attempt to import the AlertEngine module and reload to pick up local edits
+    try:
+        import alert.alert_engine as _ae_mod
+        importlib.reload(_ae_mod)
+        AlertEngine = _ae_mod.AlertEngine
+    except Exception:
+        from alert.alert_engine import AlertEngine
+    st.sidebar.header("AlertEngine Tester")
+    _threshold = st.sidebar.number_input("Threshold", min_value=1, max_value=100, value=5)
+    _entries = st.sidebar.text_area(
+        "Enter scam types and counts (one per line: type,count)",
+        value="Fake UNC email domain,6\nPayment fraud,3"
+    )
+    _send = st.sidebar.checkbox("Call send_alert()", value=False)
+
+    if st.sidebar.button("Run AlertEngine Demo"):
+        engine = AlertEngine(threshold=int(_threshold))
+
+        # Parse user entries
+        lines = [l.strip() for l in _entries.splitlines() if l.strip()]
+        parsed = []  # list of (type, count)
+        for line in lines:
+            if "," in line:
+                t, c = line.split(",", 1)
+            elif ":" in line:
+                t, c = line.split(":", 1)
+            else:
+                t, c = line, "1"
+            try:
+                count = int(c.strip())
+            except Exception:
+                count = 1
+            parsed.append((t.strip(), count))
+
+        # Feed events into the engine
+        for scam_type, count in parsed:
+            for _ in range(max(0, int(count))):
+                try:
+                    engine.add_event([scam_type])
+                except Exception as e:
+                    st.sidebar.error(f"add_event failed: {e}")
+
+        # Retrieve and display alerts (only types meeting threshold)
+        alerts = engine.get_all_alerts()
         if alerts:
             st.sidebar.success("Active Alerts:")
             for scam_type, count in alerts.items():
