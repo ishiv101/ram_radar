@@ -26,24 +26,37 @@ class AlertEngine:
         self.type_counts = {}
         self.alerts = {}
     
-    def add_event(self, flags: list) -> None:
+    def add_event(self, items: list[str]) -> Dict[str, Dict[str, int]]:
         """
-        Check database for scam types exceeding threshold and send alerts.
-        
-        Returns:
-            Dictionary of {scam_type: count} for types at or above threshold
+        Add an event to the alert engine.
+
+        `items` can be either:
+        - scam TYPES (e.g., ["phishing", "job_scam"])
+        - FLAGS from analysis (e.g., ["Phishing phrase detected", "Fake UNC email domain"])
+        - or a mix (we'll do the right thing)
         """
-        scam_types = self.grouper.detect_scam_type(flags)
+        if not items:
+            return {"counts": dict(self.type_counts), "alerts": {k: v for k, v in self.type_counts.items() if v >= self.threshold}}
+
+        # Normalize
+        items_norm = [str(x).strip() for x in items if str(x).strip()]
+
+        known_types: Set[str] = set(self.grouper.SCAM_TYPES.keys())
+
+        # If every item is a known scam type, treat as types directly.
+        # Otherwise, treat items as flags and run the grouper.
+        if all(x in known_types for x in items_norm):
+            scam_types = set(items_norm)
+        else:
+            scam_types = self.grouper.detect_scam_type(items_norm)
+
         for scam_type in scam_types:
-            if scam_type not in self.type_counts:
-                self.type_counts[scam_type] = 0
-            self.type_counts[scam_type] += 1
-            # If count reached threshold and we haven't alerted yet, create alert
+            self.type_counts[scam_type] = self.type_counts.get(scam_type, 0) + 1
+
             if self.type_counts[scam_type] >= self.threshold and scam_type not in self.alerts:
                 self.alerts[scam_type] = self.type_counts[scam_type]
                 self.send_alert(scam_type, self.type_counts[scam_type])
 
-        # Build and return a snapshot of all scam group counts and alerts above threshold
         counts_snapshot: Dict[str, int] = dict(self.type_counts)
         alerts_above_threshold: Dict[str, int] = {
             k: v for k, v in counts_snapshot.items() if v >= self.threshold
