@@ -2,12 +2,13 @@
 
 # High-risk phishing phrases
 PHISHING_KEYWORDS = [
-    "verify", "account", "confirm", "identity", "update", "payment",
-    "action required", "suspicious activity",
-    "click here immediately", "validate",
+    "verify", "confirm", "update",
+    "required", "suspicious",
+    "immediately", "validate",
     "locked", "unauthorized",
-    "re-activate", "restore access", "permanently", "permanently",
-    "security", "compromised", "password expired", "24 hours", "danger"
+    "re-activate", "restore ", "permanently",
+    "security", "compromised", "expired", "24 hours", "danger", "account", 
+    "identity", "payment", "activity", "access", "security", "password", "action", "click here"
 ]
 
 # Payment-related (very high weight)
@@ -22,7 +23,7 @@ CAMPUS_SALE_KEYWORDS = [
     "ticket", "duke", "basketball", "football",
     "student section", "macbook", "ipad",
     "airpods", "calculator", "cheap price",
-    "discount"
+    "discount", "selling", "contact"
 ]
 
 # Fake job signals
@@ -46,8 +47,8 @@ SUSPICIOUS_DOMAINS = [
 # Risk weights
 WEIGHTS = {
     "phishing": 20,
-    "payment": 20,
-    "campus_sale": 20,
+    "payment": 30,
+    "campus_sale": 30,
     "job": 20,
     "suspicious_domain": 30,
     "link": 30,

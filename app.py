@@ -126,16 +126,12 @@ def end_card():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# Top header + viewer id input (no sidebar)
+# Top header (no sidebar)
 import os
 import json
 from pathlib import Path
 from PIL import Image
-cols = st.columns([3, 1])
-with cols[0]:
-    st.markdown("## 🚨 Ram Radar")
-with cols[1]:
-    viewer_id = st.text_input("Viewer ID", value="anon_viewer")
+st.markdown("## 🚨 Ram Radar")
 st.markdown("---")
 
 
@@ -150,60 +146,7 @@ try:
 except Exception:
     import config as cfg
 
-
-def analyze_text_simple(text: str):
-    """Lightweight scam scoring using configured keyword lists.
-
-    Returns (score:int, flags:List[str])
-    """
-    t = text.lower()
-    score = 0
-    flags = []
-
-    for word in getattr(cfg, "PHISHING_KEYWORDS", []):
-        if word in t:
-            score += cfg.WEIGHTS.get("phishing", 10)
-            flags.append(f"Phishing phrase detected: '{word}'")
-
-    payment_found = False
-    for word in getattr(cfg, "PAYMENT_KEYWORDS", []):
-        if word in t:
-            score += cfg.WEIGHTS.get("payment", 15)
-            payment_found = True
-            flags.append(f"Peer-to-peer payment mention: '{word}'")
-
-    sale_found = False
-    for word in getattr(cfg, "CAMPUS_SALE_KEYWORDS", []):
-        if word in t:
-            score += cfg.WEIGHTS.get("campus_sale", 5)
-            sale_found = True
-            flags.append(f"Campus sale keyword: '{word}'")
-
-    if sale_found and payment_found:
-        score += cfg.WEIGHTS.get("sale_payment_bonus", 10)
-        flags.append("High-risk combo: Sale + P2P payment")
-
-    for word in getattr(cfg, "JOB_SCAM_KEYWORDS", []):
-        if word in t:
-            score += cfg.WEIGHTS.get("job", 10)
-            flags.append(f"Job scam phrase: '{word}'")
-
-    for domain in getattr(cfg, "SUSPICIOUS_DOMAINS", []):
-        if domain in t:
-            score += cfg.WEIGHTS.get("suspicious_domain", 20)
-            flags.append(f"Spoofed domain detected: '{domain}'")
-
-    if "http" in t or "bit.ly" in t or "tinyurl" in t:
-        score += cfg.WEIGHTS.get("link", 10)
-        flags.append("Contains external or shortened link")
-
-    for w in ["urgent", "immediately", "asap", "act now"]:
-        if w in t:
-            score += cfg.WEIGHTS.get("urgency", 5)
-            flags.append(f"Urgency language detected: '{w}'")
-
-    score = min(100, score)
-    return score, flags
+from src.utils import analyze_image_for_scams
 
 
 def _scams_file_path() -> Path:
@@ -233,59 +176,107 @@ def save_alert(entry: dict):
 tabs = st.tabs(["Report a message", "Active alerts"])
 
 with tabs[0]:
-    st.header("Report a message")
-    st.markdown("Use this tab to paste suspicious message text or upload a screenshot.")
+    st.title("🚨 Scam Detection Tool")
+    st.write("Upload an image of a potential scam message to analyze it for suspicious content.")
 
-    with st.form("report_form"):
-        provided_text = st.text_area("Message text (paste or leave empty to OCR an image)", height=200)
-        uploaded = st.file_uploader("Screenshot (optional)", type=["png", "jpg", "jpeg"])
-        use_gpu = st.checkbox("Use GPU for OCR (if available)", value=False)
-        submitted = st.form_submit_button("Analyze")
+    col1, col2 = st.columns(2)
 
-    if submitted:
-        text_to_analyze = (provided_text or "").strip()
-        ocr_used = False
-        if uploaded and not text_to_analyze:
-            try:
-                # try using the project's OCR if available
-                from src.ocr_extractor import ImageToText
-                img = Image.open(uploaded).convert("RGB")
-                ocr = ImageToText(gpu=use_gpu)
-                res = ocr.extract_text(img)
-                if res.get("success"):
-                    text_to_analyze = res.get("text", "").strip()
-                    ocr_used = True
+    with col1:
+        st.subheader("Upload Image")
+        uploaded_file = st.file_uploader(
+            "Choose an image file",
+            type=["jpg", "jpeg", "png", "bmp", "gif"]
+        )
+
+    with col2:
+        st.subheader("Options")
+        use_gpu = st.checkbox("Use GPU (if available)", value=False)
+
+    if uploaded_file is not None:
+        try:
+            # Display uploaded image
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded Image", use_column_width=True)
+            
+            # Save temporarily and analyze
+            temp_path = f"/tmp/{uploaded_file.name}"
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            # Analyze
+            with st.spinner("Analyzing image..."):
+                result = analyze_image_for_scams(temp_path, use_gpu=use_gpu)
+            
+            # Display results
+            st.divider()
+            
+            if result["success"]:
+                # Scam Score - Large and prominent
+                st.subheader("Results")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Color code the score
+                    score = result["scam_score"]
+                    if score >= 70:
+                        color = "🔴"  # Red - High risk
+                        risk_level = "HIGH RISK"
+                    elif score >= 40:
+                        color = "🟡"  # Yellow - Medium risk
+                        risk_level = "MEDIUM RISK"
+                    else:
+                        color = "🟢"  # Green - Low risk
+                        risk_level = "LOW RISK"
+                    
+                    st.metric("Scam Score", f"{score}/100", delta=risk_level)
+                
+                with col2:
+                    scam_types = result["scam_types"]
+                    types_text = ", ".join(scam_types) if scam_types else "None detected"
+                    st.metric("Scam Type(s)", types_text)
+                
+                # Extracted Text
+                st.subheader("Extracted Text")
+                st.text_area("Text from image:", value=result["extracted_text"], height=150, disabled=True)
+                
+                # Detected Flags
+                if result["flags"]:
+                    st.subheader("Detected Red Flags")
+                    for flag in result["flags"]:
+                        st.warning(f"⚠️ {flag}")
                 else:
-                    st.warning("OCR returned no usable text: " + str(res.get("error", "unknown")))
-            except Exception as e:
-                st.warning(f"OCR unavailable or failed: {e}")
+                    st.info("No suspicious indicators detected.")
+                
+                # OCR Confidence
+                st.subheader("OCR Confidence")
+                st.progress(result["confidence"], text=f"{result['confidence']:.1%}")
+                
+                # Save to alerts
+                entry = {
+                    "viewer_id": "anon_viewer",
+                    "timestamp": now_iso(),
+                    "text": result["extracted_text"],
+                    "score": result["scam_score"],
+                    "flags": result["flags"],
+                    "scam_types": list(result["scam_types"]) if result["scam_types"] else [],
+                    "ocr_used": True,
+                }
+                try:
+                    save_alert(entry)
+                except Exception as e:
+                    st.error(f"Failed to save report: {e}")
+                
+            else:
+                st.error(f"❌ Analysis Failed: {result['error']}")
+        
+        except Exception as e:
+            st.error(f"Error during analysis: {str(e)}")
+            import traceback
+            st.text(traceback.format_exc())
 
-        if not text_to_analyze:
-            st.warning("Please provide message text or upload a readable screenshot.")
-        else:
-            score, flags = analyze_text_simple(text_to_analyze)
-            lbl = risk_label(score)
-            kind = "danger" if score >= 70 else "info" if score >= 40 else "ok"
-            banner(kind, f"Risk: {lbl['label']} — {score}", f"Analyzed at {now_iso()}")
-            st.subheader("Extracted / Provided text")
-            st.write(text_to_analyze)
-            st.subheader("Detected flags")
-            render_flags(flags)
-
-            # persist locally
-            entry = {
-                "viewer_id": viewer_id,
-                "timestamp": now_iso(),
-                "text": text_to_analyze,
-                "score": score,
-                "flags": flags,
-                "ocr_used": ocr_used,
-            }
-            try:
-                save_alert(entry)
-                st.success("Report saved locally to data directory.")
-            except Exception as e:
-                st.error(f"Failed to save report: {e}")
+    st.divider()
+    st.caption("This tool analyzes images for common scam indicators including phishing, payment fraud, and job scams.")
 
 with tabs[1]:
     st.header("Active alerts")
