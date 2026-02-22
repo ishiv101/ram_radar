@@ -1,5 +1,6 @@
 import re
 from src.config import (
+    CERTIFIED_SAFE_KEYWORDS,
     PHISHING_KEYWORDS,
     PAYMENT_KEYWORDS,
     CAMPUS_SALE_KEYWORDS,
@@ -55,7 +56,10 @@ def calculate_scam_score(text: str) -> dict:
     # UNC spoof detection
     email_matches = re.findall(r'[\w\.-]+@[\w\.-]+', text)
     for email in email_matches:
-        if "unc" in email and not email.endswith("@unc.edu"):
+        if any(safe in email for safe in CERTIFIED_SAFE_KEYWORDS):
+            flags.append(f"Certified safe domain detected: '{email}'")
+            score += WEIGHTS["safe_certified"]
+        elif "unc" in email and not email.endswith(("@unc.edu", "@cs.unc.edu", "@uncedu")):
             score += WEIGHTS["suspicious_domain"]
             flags.append(f"Fake UNC email domain: '{email}'")
 
@@ -72,6 +76,10 @@ def calculate_scam_score(text: str) -> dict:
             flags.append(f"Urgency language detected: '{word}'")
 
     score = min(score, 100)
+    if score < 10:
+        score = 10  # Minimum score for any detected indicators
+    if score > 90:
+        score = 90  # Cap score to avoid false positives
 
     return {
         "score": score,

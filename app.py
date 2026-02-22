@@ -20,20 +20,27 @@ st.set_page_config(
 
 CSS = """
 <style>
+/* Carolina Blue Theme */
+:root {
+  --carolina-dark: #13294B;
+  --carolina-light: #4B9CD3;
+  --carolina-white: #FFFFFF;
+}
+
 /* Layout polish */
 .block-container { padding-top: 1.5rem; padding-bottom: 2.0rem; }
-h1, h2, h3 { letter-spacing: -0.02em; }
+h1, h2, h3 { letter-spacing: -0.02em; color: #13294B; }
 
 /* Card look */
 .card {
-  border: 1px solid rgba(49, 51, 63, 0.15);
+  border: 1px solid rgba(19, 41, 75, 0.2);
   border-radius: 16px;
   padding: 16px 16px;
-  background: rgba(255,255,255,0.7);
+  background: rgba(75, 156, 211, 0.05);
   margin-bottom: 12px;
 }
-.card-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
-.small-muted { color: rgba(49,51,63,0.65); font-size: 13px; }
+.card-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; color: #13294B; }
+.small-muted { color: rgba(19, 41, 75, 0.7); font-size: 13px; }
 
 /* Badges */
 .badge {
@@ -41,30 +48,31 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
-  border: 1px solid rgba(49, 51, 63, 0.15);
+  border: 1px solid rgba(19, 41, 75, 0.2);
   margin: 4px 6px 0 0;
 }
-.badge-red { background: rgba(255, 227, 227, 0.9); }
-.badge-yellow { background: rgba(255, 243, 191, 0.9); }
-.badge-green { background: rgba(211, 249, 216, 0.9); }
-.badge-gray { background: rgba(241, 243, 245, 0.9); }
+.badge-red { background: rgba(222, 53, 53, 0.15); color: #8B0000; }
+.badge-yellow { background: rgba(255, 193, 7, 0.15); color: #FF6B00; }
+.badge-green { background: rgba(75, 156, 211, 0.15); color: #13294B; }
+.badge-gray { background: rgba(75, 156, 211, 0.1); color: #13294B; }
 
 /* Risk pill */
 .risk-pill {
   display:inline-block; padding:6px 10px; border-radius:999px;
-  font-weight:700; font-size:12px; border:1px solid rgba(49,51,63,0.15);
+  font-weight:700; font-size:12px; border:1px solid rgba(19,41,75,0.2);
+  background: rgba(75, 156, 211, 0.1); color: #13294B;
 }
 
 /* Top alert banner */
 .banner {
   border-radius: 16px;
   padding: 14px 16px;
-  border: 1px solid rgba(49, 51, 63, 0.15);
+  border: 1px solid rgba(19, 41, 75, 0.2);
   margin-bottom: 16px;
 }
-.banner-danger { background: rgba(255, 227, 227, 0.7); }
-.banner-info { background: rgba(231, 245, 255, 0.7); }
-.banner-ok { background: rgba(211, 249, 216, 0.7); }
+.banner-danger { background: rgba(222, 53, 53, 0.1); border-left: 4px solid #DE3535; }
+.banner-info { background: rgba(75, 156, 211, 0.1); border-left: 4px solid #4B9CD3; }
+.banner-ok { background: rgba(75, 156, 211, 0.15); border-left: 4px solid #13294B; }
 
 /* Button row */
 .btnrow { display:flex; gap:8px; flex-wrap: wrap; }
@@ -243,7 +251,7 @@ with tabs[0]:
                 
                 with image_col:
                     st.subheader("Uploaded Image")
-                    st.image(image, use_column_width=True)
+                    st.image(image, use_container_width=True)
                 
                 # Bottom: OCR Confidence
                 st.subheader("OCR Confidence")

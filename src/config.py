@@ -31,7 +31,7 @@ JOB_SCAM_KEYWORDS = [
     "remote job", "easy money", "weekly pay",
     "$500/week", "$300 weekly", "data entry",
     "personal assistant", "work from home",
-    "kindly", "flexible hours", "contact", "professor"
+    "kindly", "flexible", "contact", "professor"
     "research assistant", "admin assistant", "no experience"
 ]
 
@@ -44,6 +44,10 @@ SUSPICIOUS_DOMAINS = [
     "unc-edu.com"
 ]
 
+CERTIFIED_SAFE_KEYWORDS = [
+    "cs.unc.edu", "unc.edu", "uncedu"
+]
+
 # Risk weights
 WEIGHTS = {
     "phishing": 20,
@@ -53,7 +57,8 @@ WEIGHTS = {
     "suspicious_domain": 30,
     "link": 30,
     "urgency": 40,
-    "sale_payment_bonus": 50
+    "sale_payment_bonus": 50,
+    "safe_certified": -50,
 }
 
 # Risk thresholds

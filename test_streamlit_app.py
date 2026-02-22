@@ -36,7 +36,7 @@ if uploaded_file is not None:
     try:
         # Display uploaded image
         image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+        st.image(image, caption="Uploaded Image", use_container_width=True)
         
         # Save temporarily and analyze
         temp_path = f"/tmp/{uploaded_file.name}"
