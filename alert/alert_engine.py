@@ -53,9 +53,32 @@ class AlertEngine:
         for scam_type in scam_types:
             self.type_counts[scam_type] = self.type_counts.get(scam_type, 0) + 1
 
-            if self.type_counts[scam_type] >= self.threshold and scam_type not in self.alerts:
+            # Only trigger alert if count is exactly threshold
+            if self.type_counts[scam_type] == self.threshold and scam_type not in self.alerts:
                 self.alerts[scam_type] = self.type_counts[scam_type]
                 self.send_alert(scam_type, self.type_counts[scam_type])
+            # Persist alert in session state if already triggered
+            if scam_type in self.alerts:
+                self.persist_alert_to_inbox(scam_type, self.alerts[scam_type])
+
+    def persist_alert_to_inbox(self, scam_type: str, count: int):
+        import streamlit as st
+        timestamp = datetime.now().isoformat()
+        alert_message = (
+            f"[{timestamp}] ALERT: {scam_type.upper()} scams detected! "
+            f"Total reports: {count}"
+        )
+        if 'ae_frontend_alerts' not in st.session_state:
+            st.session_state['ae_frontend_alerts'] = []
+        # Only add if not already present
+        already = any(a.get('scam_type') == scam_type for a in st.session_state['ae_frontend_alerts'])
+        if not already:
+            st.session_state['ae_frontend_alerts'].append({
+                'scam_type': scam_type,
+                'count': count,
+                'timestamp': timestamp,
+                'message': alert_message
+            })
 
         counts_snapshot: Dict[str, int] = dict(self.type_counts)
         alerts_above_threshold: Dict[str, int] = {
@@ -71,16 +94,23 @@ class AlertEngine:
     def send_alert(self, scam_type: str, count: int):
         """
         Send alert for a scam type exceeding threshold.
-        
-        Args:
-            scam_type: Type of scam (e.g., 'phishing', 'payment_fraud')
-            count: Number of reports for this scam type
+        Instead of printing, store alert in Streamlit session state for frontend display.
         """
+        import streamlit as st
         timestamp = datetime.now().isoformat()
         alert_message = (
             f"[{timestamp}] ALERT: {scam_type.upper()} scams detected! "
             f"Total reports: {count}"
         )
-        print(alert_message)
+        # Store alert in session state for inbox and popup
+        if 'ae_frontend_alerts' not in st.session_state:
+            st.session_state['ae_frontend_alerts'] = []
+        st.session_state['ae_frontend_alerts'].append({
+            'scam_type': scam_type,
+            'count': count,
+            'timestamp': timestamp,
+            'message': alert_message
+        })
+        st.session_state['ae_popup_alert'] = alert_message
 
 

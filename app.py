@@ -1,6 +1,55 @@
+# Clear inbox and AlertEngine frontend alerts on Streamlit startup
+import streamlit as st
+st.session_state["inbox_alerts"] = []
+st.session_state["ae_frontend_alerts"] = []
+import os
 #frontend - main app & display
+# Clear active alerts file on Streamlit startup
+def _scams_file_path_startup() -> str:
+    from pathlib import Path
+    import src.config as cfg
+    d = Path(getattr(cfg, "DATA_DIR", "data"))
+    d.mkdir(parents=True, exist_ok=True)
+    return str(d / getattr(cfg, "SCAMS_FILE", "scams.json").split(os.sep)[-1])
+
+alerts_path = _scams_file_path_startup()
+if os.path.exists(alerts_path):
+    with open(alerts_path, "w", encoding="utf-8") as f:
+        f.write("[]")
 
 import streamlit as st
+import threading
+import time
+# --- Background polling for AlertEngine ---
+from alert.alert_engine import AlertEngine
+
+# Store scam types that have already triggered at threshold to avoid duplicate alerts
+if 'ae_exact_threshold_shown' not in st.session_state:
+    st.session_state['ae_exact_threshold_shown'] = set()
+
+def poll_alert_engine_exact_threshold(threshold=5, poll_interval=5):
+    engine = AlertEngine(threshold=threshold)
+    while True:
+        alerts = engine.get_all_alerts()
+        # Only trigger if count == threshold (not over)
+        for scam_type, count in alerts.items():
+            if count == threshold and scam_type not in st.session_state['ae_exact_threshold_shown']:
+                st.session_state['ae_exact_threshold_shown'].add(scam_type)
+                st.session_state['ae_exact_threshold_alert'] = (scam_type, count)
+        time.sleep(poll_interval)
+
+# Start polling thread only once
+if 'ae_polling_thread_started' not in st.session_state:
+    t = threading.Thread(target=poll_alert_engine_exact_threshold, args=(5, 5), daemon=True)
+    t.start()
+    st.session_state['ae_polling_thread_started'] = True
+# --- Main area: two tabs (Report / Active alerts)
+# -----------------------------
+
+# Display alert if scam group hits exactly the threshold
+if 'ae_exact_threshold_alert' in st.session_state:
+    scam_type, count = st.session_state['ae_exact_threshold_alert']
+    st.warning(f"Scam group '{scam_type}' has reached the threshold of {count} reports!", icon="🚨")
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import os
@@ -425,6 +474,7 @@ with tabs[0]:
     st.caption("This tool analyzes images and text for common scam indicators including phishing, payment fraud, and job scams.")
 
 with tabs[1]:
+
     st.header("Active alerts")
     st.markdown("Recent reported messages (local).")
     alerts = load_alerts()
@@ -437,22 +487,42 @@ with tabs[1]:
             render_flags(a.get("flags", []))
             end_card()
 
+    if st.button("Clear active alerts"):
+        # Clear the alerts file (legacy JSON)
+        p = _scams_file_path()
+        if p.exists():
+            p.write_text("[]", encoding="utf-8")
+        st.success("Active alerts cleared")
+
 
 with tabs[2]:
+
     st.header("Inbox")
-    st.markdown("Alerts that were generated when a scam type exceeded the configured threshold.")
+    st.markdown("Alerts that were generated when a scam type exceeded the configured threshold or were triggered by AlertEngine.")
     inbox = st.session_state.get("inbox_alerts", [])
-    if not inbox:
-        st.info("No threshold alerts yet.")
+    ae_alerts = st.session_state.get("ae_frontend_alerts", [])
+    # Show all alerts that have been triggered (count >= 5), persist until cleared
+    persisted_alerts = [a for a in (list(reversed(inbox)) + list(reversed(ae_alerts))) if a.get("count") >= 5]
+    if not persisted_alerts:
+        st.info("No alerts yet.")
     else:
-        # show most recent first
-        for it in reversed(inbox):
-            t = it.get("type")
+        for it in persisted_alerts:
+            t = it.get("scam_type") or it.get("type")
             c = it.get("count")
             ts = it.get("timestamp")
+            msg = it.get("message")
             card(f"{t} — {c} reports", subtitle=ts)
-            st.write(f"Type: **{t}** — Count: **{c}**")
+            if msg:
+                st.write(msg)
+            else:
+                st.write(f"Type: **{t}** — Count: **{c}**")
             end_card()
+    # Display AlertEngine popup warning if alert is in inbox
+    if persisted_alerts:
+        for it in persisted_alerts:
+            msg = it.get("message")
+            if msg:
+                st.warning(msg, icon="🚨")
 
     if st.button("Clear inbox alerts"):
         st.session_state["inbox_alerts"] = []
