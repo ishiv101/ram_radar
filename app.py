@@ -1,50 +1,9 @@
+# Add missing import for streamlit
 import streamlit as st
 #frontend - main app & display
-import threading
-import time
-# --- Background polling for AlertEngine ---
-from alert.alert_engine import AlertEngine
-
-# Store scam types that have already triggered at threshold to avoid duplicate alerts
-if 'ae_exact_threshold_shown' not in st.session_state:
-    st.session_state['ae_exact_threshold_shown'] = set()
-
-def poll_alert_engine_exact_threshold(threshold=5, poll_interval=5):
-    engine = AlertEngine(threshold=threshold)
-    while True:
-        alerts = engine.get_all_alerts()
-        # Trigger when count > threshold (user requested "more than 5 occurrences")
-        for scam_type, count in alerts.items():
-            if count > threshold and scam_type not in st.session_state['ae_exact_threshold_shown']:
-                # mark as shown
-                st.session_state['ae_exact_threshold_shown'].add(scam_type)
-                # set a simple alert tuple for immediate UI warning
-                st.session_state['ae_exact_threshold_alert'] = (scam_type, count)
-                # also append a structured alert into ae_frontend_alerts for the Inbox
-                if 'ae_frontend_alerts' not in st.session_state:
-                    st.session_state['ae_frontend_alerts'] = []
-                st.session_state['ae_frontend_alerts'].append({
-                    'scam_type': scam_type,
-                    'count': count,
-                    'timestamp': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-                    'message': f"Scam group '{scam_type}' exceeded threshold with {count} reports.",
-                })
-        time.sleep(poll_interval)
-
-# Start polling thread only once
-if 'ae_polling_thread_started' not in st.session_state:
-    t = threading.Thread(target=poll_alert_engine_exact_threshold, args=(5, 5), daemon=True)
-    t.start()
-    st.session_state['ae_polling_thread_started'] = True
-# --- Main area: two tabs (Report / Active alerts)
-# -----------------------------
-
-# Display alert if scam group hits exactly the threshold
-if 'ae_exact_threshold_alert' in st.session_state:
-    scam_type, count = st.session_state['ae_exact_threshold_alert']
-    st.warning(f"Scam group '{scam_type}' has reached the threshold of {count} reports!", icon="🚨")
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+# Store scam types that have already triggered at threshold to avoid duplicate alerts
+from typing import List, Optional
 import os
 import json
 from pathlib import Path
@@ -61,81 +20,19 @@ except Exception:
 
 # Page config + styling
 # -----------------------------
+logo = Image.open("assets/logo.png")
+
 st.set_page_config(
     page_title="Ram Radar",
-    page_icon="🚨",
+    page_icon=logo,
     layout="wide",
 )
-
-CSS = """
-<style>
-/* Layout polish */
-.block-container { padding-top: 1.5rem; padding-bottom: 2.0rem; }
-h1, h2, h3 { letter-spacing: -0.02em; }
-
-/* Card look */
-.card {
-  border: 1px solid rgba(49, 51, 63, 0.15);
-  border-radius: 16px;
-  padding: 16px 16px;
-  background: rgba(255,255,255,0.7);
-  margin-bottom: 12px;
-}
-.card-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
-.small-muted { color: rgba(49,51,63,0.65); font-size: 13px; }
-
-/* Badges */
-.badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  border: 1px solid rgba(49, 51, 63, 0.15);
-  margin: 4px 6px 0 0;
-}
-.badge-red { background: rgba(255, 227, 227, 0.9); }
-.badge-yellow { background: rgba(255, 243, 191, 0.9); }
-.badge-green { background: rgba(211, 249, 216, 0.9); }
-.badge-gray { background: rgba(241, 243, 245, 0.9); }
-
-/* Risk pill */
-.risk-pill {
-  display:inline-block; padding:6px 10px; border-radius:999px;
-  font-weight:700; font-size:12px; border:1px solid rgba(49,51,63,0.15);
-}
-
-/* Top alert banner */
-.banner {
-  border-radius: 16px;
-  padding: 14px 16px;
-  border: 1px solid rgba(49, 51, 63, 0.15);
-  margin-bottom: 16px;
-}
-.banner-danger { background: rgba(255, 227, 227, 0.7); }
-.banner-info { background: rgba(231, 245, 255, 0.7); }
-.banner-ok { background: rgba(211, 249, 216, 0.7); }
-
-/* Button row */
-.btnrow { display:flex; gap:8px; flex-wrap: wrap; }
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
-
 
 # -----------------------------
 # Helpers (UI)
 # -----------------------------
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def risk_label(score: int) -> Dict[str, str]:
-    if score >= 70:
-        return {"label": "HIGH", "cls": "badge-red"}
-    if score >= 40:
-        return {"label": "MEDIUM", "cls": "badge-yellow"}
-    return {"label": "LOW", "cls": "badge-green"}
-
 
 def pill_html(text: str, cls: str) -> str:
     return f'<span class="badge {cls}">{text}</span>'
@@ -157,19 +54,6 @@ def render_flags(flags: List[str]):
         st.markdown(pill_html(f, cls), unsafe_allow_html=True)
 
 
-def banner(kind: str, title: str, body: str):
-    cls = {"danger": "banner-danger", "info": "banner-info", "ok": "banner-ok"}.get(kind, "banner-info")
-    st.markdown(
-        f"""
-        <div class="banner {cls}">
-          <div style="font-weight:800; font-size:16px; margin-bottom:4px;">{title}</div>
-          <div class="small-muted">{body}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def card(title: str, subtitle: Optional[str] = None):
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown(f'<div class="card-title">{title}</div>', unsafe_allow_html=True)
@@ -182,8 +66,15 @@ def end_card():
 
 
 # Top header (no sidebar)
-st.markdown("## 🚨 Ram Radar")
-st.markdown("---")
+col1, col2 = st.columns([1, 12])  # adjust ratio if needed
+
+with col1:
+    st.markdown("")
+    st.image(logo, width=150)
+
+with col2:
+    st.markdown("# Ram Radar")
+    st.markdown("##### Protecting the Carolina community from scams.")
 
 
 # -----------------------------
@@ -255,32 +146,6 @@ def save_alert(entry: dict):
         return False
 
 
-def show_db_contents():
-    """Display the current database contents in the Streamlit UI.
-
-    If a ScamDatabase is available, read from it; otherwise fall back to the
-    legacy JSON storage used by load_alerts().
-    """
-    try:
-        #st.subheader("Stored reports (database)")
-        if _db is not None:
-            records = _db.get_all_records()
-            # ScamRecord -> dict
-            recs = []
-            for r in records:
-                try:
-                    recs.append(r.to_dict())
-                except Exception:
-                    # already a dict
-                    recs.append(r)
-            #st.json(recs)
-        else:
-            recs = load_alerts()
-            #st.json(recs)
-    except Exception as e:
-        st.error(f"Failed to load DB records: {e}")
-
-
 def _get_all_records_as_dicts():
     """Return all stored records as a list of dicts (DB or legacy JSON)."""
     try:
@@ -291,7 +156,7 @@ def _get_all_records_as_dicts():
         return []
 
 
-def check_and_notify_threshold(entry: dict, threshold: int = 5):
+def check_and_notify_threshold(entry: dict, threshold: int = 1):
     """Check counts for scam types and notify if any exceed threshold.
 
     Uses session_state to avoid repeating the same alert for a scam type.
@@ -309,13 +174,15 @@ def check_and_notify_threshold(entry: dict, threshold: int = 5):
 
         triggered = []
         for t, cnt in counts.items():
-            if cnt > threshold and t not in st.session_state["threshold_alerts_shown"]:
+            if cnt >= threshold and t not in st.session_state["threshold_alerts_shown"]:
                 triggered.append((t, cnt))
-
+        
         if triggered:
             # Mark them as shown so we don't repeat
             for t, _ in triggered:
                 st.session_state["threshold_alerts_shown"].add(t)
+            for t, c in triggered:
+                st.toast(f"🚨 **{t}** has reached **{c}** reports!", icon="🚨")
 
             # ensure inbox exists in session state
             if "inbox_alerts" not in st.session_state:
@@ -328,10 +195,11 @@ def check_and_notify_threshold(entry: dict, threshold: int = 5):
                     "count": c,
                     "timestamp": now_iso(),
                 })
-                msgs_list.append(f"<li><strong>{t}</strong>: {c} reports</li>")
+
+            # Prepare HTML list items for each triggered alert
+            msgs = ''.join(f"<li><b>{t}</b>: {c} reports</li>" for t, c in triggered)
 
             # Render a prominent banner and an expanding detail box
-            msgs = "".join(msgs_list)
             st.markdown(
                 f"<div class='banner banner-danger'><div style='font-weight:800; font-size:16px;'>Threshold reached</div>\n"
                 f"<div class='small-muted'>The following scam types exceeded the threshold of {threshold} reports:</div>\n"
@@ -350,7 +218,7 @@ def check_and_notify_threshold(entry: dict, threshold: int = 5):
 tabs = st.tabs(["Report a message", "Active alerts", "Inbox"])
 
 with tabs[0]:
-    st.title("🚨 Scam Detection Tool")
+    st.markdown("## Scam Detection Tool")
     st.write("Upload an image of a potential scam message to analyze it for suspicious content.")
 
     use_gpu = False  # GPU acceleration disabled by default
@@ -374,6 +242,19 @@ with tabs[0]:
         )
         analyze_text_btn = st.button("Analyze Text", key="analyze_text_btn_col")
 
+    st.markdown("""
+<style>
+.custom-warning {
+    background-color: #a6d1ed;  /* Carolina Blue */
+    color: #13294B;
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+</style>
+""", unsafe_allow_html=True)
+    
     if uploaded_file is not None:
         try:
             # Save temporarily
@@ -412,7 +293,10 @@ with tabs[0]:
                     st.subheader("Detected Red Flags")
                     if result["flags"]:
                         for flag in result["flags"]:
-                            st.warning(f"⚠️ {flag}")
+                            st.markdown(
+                                f'<div class="custom-warning">⚠️ {flag}</div>',
+                                    unsafe_allow_html=True
+            )
                     else:
                         st.info("No suspicious indicators detected.")
                 
@@ -443,8 +327,7 @@ with tabs[0]:
                     st.error("Failed to save report to storage")
                 else:
                     st.success("Report saved")
-                    show_db_contents()
-                    check_and_notify_threshold(entry, threshold=5)
+                    check_and_notify_threshold(entry, threshold=1)
                 
             else:
                 st.error(f"❌ Analysis Failed: {result['error']}")
@@ -507,8 +390,7 @@ with tabs[0]:
                 saved = save_alert(entry)
                 if saved:
                     st.success("Report saved locally to data directory.")
-                    show_db_contents()
-                    check_and_notify_threshold(entry, threshold=5)
+                    check_and_notify_threshold(entry, threshold=1)
                 else:
                     st.error("Failed to save report to storage")
             else:
@@ -523,6 +405,7 @@ with tabs[0]:
     st.caption("This tool analyzes images and text for common scam indicators including phishing, payment fraud, and job scams.")
 
 with tabs[1]:
+
     st.header("Active alerts")
     st.markdown("Recent reported messages (local).")
     alerts = load_alerts()
@@ -535,141 +418,43 @@ with tabs[1]:
             render_flags(a.get("flags", []))
             end_card()
 
+    if st.button("Clear active alerts"):
+        # Clear the alerts file (legacy JSON)
+        p = _scams_file_path()
+        if p.exists():
+            p.write_text("[]", encoding="utf-8")
+        st.success("Active alerts cleared")
+
 
 with tabs[2]:
+
     st.header("Inbox")
-    st.markdown("Alerts that were generated when a scam type exceeded the configured threshold.")
+    st.markdown("Alerts that were generated when a scam type exceeded the configured threshold or were triggered by AlertEngine.")
     inbox = st.session_state.get("inbox_alerts", [])
-    if not inbox:
-        st.info("No threshold alerts yet.")
+    ae_alerts = st.session_state.get("ae_frontend_alerts", [])
+    # Show all alerts that have been triggered (count >= 5), persist until cleared
+    persisted_alerts = [a for a in (list(reversed(inbox)) + list(reversed(ae_alerts))) if a.get("count") >= 5]
+    if not persisted_alerts:
+        st.info("No alerts yet.")
     else:
-        # show most recent first
-        for it in reversed(inbox):
-            t = it.get("type")
+        for it in persisted_alerts:
+            t = it.get("scam_type") or it.get("type")
             c = it.get("count")
             ts = it.get("timestamp")
+            msg = it.get("message")
             card(f"{t} — {c} reports", subtitle=ts)
-            st.write(f"Type: **{t}** — Count: **{c}**")
+            if msg:
+                st.write(msg)
+            else:
+                st.write(f"Type: **{t}** — Count: **{c}**")
             end_card()
+    # Display AlertEngine popup warning if alert is in inbox
+    if persisted_alerts:
+        for it in persisted_alerts:
+            msg = it.get("message")
+            if msg:
+                st.warning(msg, icon="🚨")
 
     if st.button("Clear inbox alerts"):
         st.session_state["inbox_alerts"] = []
         st.success("Inbox cleared")
-
-
-
-# --- AlertEngine Streamlit integration (appended; does not modify existing UI) ---
-try:
-    import importlib
-    import streamlit as st
-
-    # -------------------------
-    # Import AlertEngine (reload for local edits)
-    # -------------------------
-    try:
-        import alert.alert_engine as _ae_mod
-        importlib.reload(_ae_mod)
-        AlertEngine = _ae_mod.AlertEngine
-    except Exception:
-        from alert.alert_engine import AlertEngine
-
-    st.sidebar.header("AlertEngine Tester")
-    _threshold = st.sidebar.number_input("Threshold", min_value=1, max_value=100, value=5)
-    _send = st.sidebar.checkbox("Call send_alert()", value=False)
-
-    # -------------------------
-    # Scam types (safe fallback)
-    # -------------------------
-    try:
-        from src.scam_grouper import ScamGrouper
-        grouper = ScamGrouper()
-        scam_types_dict = getattr(grouper, "SCAM_TYPES", {})
-        available_types = list(scam_types_dict.keys()) if isinstance(scam_types_dict, dict) else []
-    except Exception:
-        available_types = []
-
-    if not available_types:
-        available_types = ["phishing", "payment_fraud", "campus_sale", "job_scam", "domain_spoofing"]
-
-    _selected_types = st.sidebar.multiselect(
-        "Select scam type(s)",
-        options=available_types,
-        default=[available_types[0]] if available_types else [],
-    )
-
-    st.sidebar.subheader("Counts per selected type")
-
-    # -------------------------
-    # Per-type unique counts
-    # -------------------------
-    per_type_counts = {}
-    for scam_type in _selected_types:
-        per_type_counts[scam_type] = st.sidebar.number_input(
-            f"{scam_type} count",
-            min_value=0,
-            max_value=500,
-            value=0,
-            step=1,
-            key=f"count_{scam_type}",
-        )
-
-    # -------------------------
-    # Session state for persistence across reruns
-    # -------------------------
-    if "ae_last_result" not in st.session_state:
-        st.session_state.ae_last_result = None
-    if "ae_last_alerts" not in st.session_state:
-        st.session_state.ae_last_alerts = None
-    if "ae_last_error" not in st.session_state:
-        st.session_state.ae_last_error = None
-
-    # -------------------------
-    # Run engine on click
-    # -------------------------
-    if st.sidebar.button("Inbox"):
-        st.session_state.ae_last_error = None
-        try:
-            engine = AlertEngine(threshold=int(_threshold))
-
-            # Feed events based on per-type counts
-            last_result = None
-            for scam_type, n in per_type_counts.items():
-                for _ in range(int(n)):
-                    last_result = engine.add_event([scam_type])
-
-            st.session_state.ae_last_result = last_result
-            st.session_state.ae_last_alerts = engine.get_all_alerts()
-
-            # Send alerts immediately if requested
-            if _send and st.session_state.ae_last_alerts:
-                for k, v in st.session_state.ae_last_alerts.items():
-                    try:
-                        engine.send_alert(k, v)
-                    except Exception as e:
-                        st.sidebar.error(f"send_alert failed for {k}: {type(e).__name__}: {e}")
-
-        except Exception as e:
-            st.session_state.ae_last_error = f"{type(e).__name__}: {e}"
-
-    # -------------------------
-    # Display results: ALERTS ONLY (counts >= threshold)
-    # -------------------------
-    if st.session_state.ae_last_error:
-        st.sidebar.error(f"Inbox failed: {st.session_state.ae_last_error}")
-
-    result = st.session_state.ae_last_result
-    alerts = st.session_state.ae_last_alerts
-
-    st.sidebar.write("**Alerts (count ≥ threshold):**")
-    if alerts:
-        for k, v in alerts.items():
-            st.sidebar.write(f"- {k}: {v}")
-        st.sidebar.success("Alerts triggered")
-    else:
-        # Only show this after at least one run
-        if result is not None or st.session_state.ae_last_error is not None:
-            st.sidebar.info("No alerts triggered")
-
-except Exception as e:
-    st.sidebar.error(f"AlertEngine integration failed: {type(e).__name__}: {e}")
-    raise
