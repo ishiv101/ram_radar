@@ -1,23 +1,4 @@
-# Clear inbox and AlertEngine frontend alerts on Streamlit startup
-import streamlit as st
-st.session_state["inbox_alerts"] = []
-st.session_state["ae_frontend_alerts"] = []
-import os
 #frontend - main app & display
-# Clear active alerts file on Streamlit startup
-def _scams_file_path_startup() -> str:
-    from pathlib import Path
-    import src.config as cfg
-    d = Path(getattr(cfg, "DATA_DIR", "data"))
-    d.mkdir(parents=True, exist_ok=True)
-    return str(d / getattr(cfg, "SCAMS_FILE", "scams.json").split(os.sep)[-1])
-
-alerts_path = _scams_file_path_startup()
-if os.path.exists(alerts_path):
-    with open(alerts_path, "w", encoding="utf-8") as f:
-        f.write("[]")
-
-import streamlit as st
 import threading
 import time
 # --- Background polling for AlertEngine ---
@@ -282,7 +263,7 @@ def check_and_notify_threshold(entry: dict, threshold: int = 5):
                 })
 
             # Render a prominent banner and an expanding detail box
-            msgs = "".join([f"<li><strong>{t}</strong>: {c} reports</li>" for t, c in triggered])
+                st.session_state["inbox_alerts"] = [] 
             st.markdown(
                 f"<div class='banner banner-danger'><div style='font-weight:800; font-size:16px;'>Threshold reached</div>\n"
                 f"<div class='small-muted'>The following scam types exceeded the threshold of {threshold} reports:</div>\n"
