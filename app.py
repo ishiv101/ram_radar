@@ -59,12 +59,83 @@ except Exception:
     _db = None
 
 
-# Page config + styling
-# -----------------------------
 st.set_page_config(
     page_title="Ram Radar",
     page_icon="🚨",
     layout="wide",
+)
+# Custom CSS for modern look
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #f5f7fa;
+    }
+    .stButton>button {
+        background-color: #4F8A8B;
+        color: white;
+        border-radius: 8px;
+        padding: 0.5em 2em;
+        font-size: 1.1em;
+        border: none;
+    }
+    .stTextInput>div>input {
+        border-radius: 8px;
+        border: 1px solid #4F8A8B;
+    }
+    .stFileUploader>div>button {
+        background-color: #4F8A8B;
+        color: white;
+        border-radius: 8px;
+    }
+    .stSelectbox>div>div>div {
+        border-radius: 8px;
+        border: 1px solid #4F8A8B;
+    }
+    .stSidebar .sidebar-content {
+        background-color: #e6f2ff;
+    }
+    .badge {
+        display: inline-block;
+        padding: 0.25em 0.75em;
+        border-radius: 8px;
+        font-size: 0.95em;
+        margin-right: 0.5em;
+        margin-bottom: 0.25em;
+    }
+    .badge-red { background: #ff4c4c; color: #fff; }
+    .badge-yellow { background: #ffe066; color: #333; }
+    .badge-green { background: #4caf50; color: #fff; }
+    .badge-gray { background: #bdbdbd; color: #fff; }
+    .banner {
+        padding: 1em;
+        border-radius: 12px;
+        margin-bottom: 1em;
+        font-size: 1.05em;
+    }
+    .banner-danger { background: #ffebee; border-left: 6px solid #ff4c4c; }
+    .banner-info { background: #e6f2ff; border-left: 6px solid #4F8A8B; }
+    .banner-ok { background: #e8f5e9; border-left: 6px solid #4caf50; }
+    .card {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        padding: 1em;
+        margin-bottom: 1em;
+    }
+    .card-title {
+        font-weight: 700;
+        font-size: 1.1em;
+        margin-bottom: 0.5em;
+        color: #4F8A8B;
+    }
+    .small-muted {
+        color: #888;
+        font-size: 0.95em;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
 # -----------------------------
