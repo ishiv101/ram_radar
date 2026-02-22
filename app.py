@@ -1,3 +1,5 @@
+# Add missing import for streamlit
+import streamlit as st
 #frontend - main app & display
 import threading
 import time
@@ -262,8 +264,10 @@ def check_and_notify_threshold(entry: dict, threshold: int = 5):
                     "timestamp": now_iso(),
                 })
 
+            # Prepare HTML list items for each triggered alert
+            msgs = ''.join(f"<li><b>{t}</b>: {c} reports</li>" for t, c in triggered)
+
             # Render a prominent banner and an expanding detail box
-                st.session_state["inbox_alerts"] = [] 
             st.markdown(
                 f"<div class='banner banner-danger'><div style='font-weight:800; font-size:16px;'>Threshold reached</div>\n"
                 f"<div class='small-muted'>The following scam types exceeded the threshold of {threshold} reports:</div>\n"
