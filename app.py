@@ -1,4 +1,3 @@
-# Add missing import for streamlit
 import streamlit as st
 #frontend - main app & display
 import threading
@@ -14,11 +13,22 @@ def poll_alert_engine_exact_threshold(threshold=5, poll_interval=5):
     engine = AlertEngine(threshold=threshold)
     while True:
         alerts = engine.get_all_alerts()
-        # Only trigger if count == threshold (not over)
+        # Trigger when count > threshold (user requested "more than 5 occurrences")
         for scam_type, count in alerts.items():
-            if count == threshold and scam_type not in st.session_state['ae_exact_threshold_shown']:
+            if count > threshold and scam_type not in st.session_state['ae_exact_threshold_shown']:
+                # mark as shown
                 st.session_state['ae_exact_threshold_shown'].add(scam_type)
+                # set a simple alert tuple for immediate UI warning
                 st.session_state['ae_exact_threshold_alert'] = (scam_type, count)
+                # also append a structured alert into ae_frontend_alerts for the Inbox
+                if 'ae_frontend_alerts' not in st.session_state:
+                    st.session_state['ae_frontend_alerts'] = []
+                st.session_state['ae_frontend_alerts'].append({
+                    'scam_type': scam_type,
+                    'count': count,
+                    'timestamp': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                    'message': f"Scam group '{scam_type}' exceeded threshold with {count} reports.",
+                })
         time.sleep(poll_interval)
 
 # Start polling thread only once
@@ -256,18 +266,21 @@ def check_and_notify_threshold(entry: dict, threshold: int = 5):
             if "inbox_alerts" not in st.session_state:
                 st.session_state["inbox_alerts"] = []
 
-            # add each triggered alert into the inbox (type, count, timestamp)
+            # add each triggered alert into the inbox (type, count, timestamp, message)
+            msgs_list = []
             for t, c in triggered:
+                msg = f"Scam type '{t}' has {c} reports"
                 st.session_state["inbox_alerts"].append({
+                    "scam_type": t,
                     "type": t,
                     "count": c,
                     "timestamp": now_iso(),
+                    "message": msg,
                 })
-
-            # Prepare HTML list items for each triggered alert
-            msgs = ''.join(f"<li><b>{t}</b>: {c} reports</li>" for t, c in triggered)
+                msgs_list.append(f"<li><strong>{t}</strong>: {c} reports</li>")
 
             # Render a prominent banner and an expanding detail box
+            msgs = "".join(msgs_list)
             st.markdown(
                 f"<div class='banner banner-danger'><div style='font-weight:800; font-size:16px;'>Threshold reached</div>\n"
                 f"<div class='small-muted'>The following scam types exceeded the threshold of {threshold} reports:</div>\n"
@@ -512,120 +525,3 @@ with tabs[2]:
     if st.button("Clear inbox alerts"):
         st.session_state["inbox_alerts"] = []
         st.success("Inbox cleared")
-
-
-# --- AlertEngine Streamlit integration (appended; does not modify existing UI) ---
-try:
-    import importlib
-    import streamlit as st
-
-    # -------------------------
-    # Import AlertEngine (reload for local edits)
-    # -------------------------
-    try:
-        import alert.alert_engine as _ae_mod
-        importlib.reload(_ae_mod)
-        AlertEngine = _ae_mod.AlertEngine
-    except Exception:
-        from alert.alert_engine import AlertEngine
-
-    st.sidebar.header("AlertEngine Tester")
-    _threshold = st.sidebar.number_input("Threshold", min_value=1, max_value=100, value=5)
-    _send = st.sidebar.checkbox("Call send_alert()", value=False)
-
-    # -------------------------
-    # Scam types (safe fallback)
-    # -------------------------
-    try:
-        from src.scam_grouper import ScamGrouper
-        grouper = ScamGrouper()
-        scam_types_dict = getattr(grouper, "SCAM_TYPES", {})
-        available_types = list(scam_types_dict.keys()) if isinstance(scam_types_dict, dict) else []
-    except Exception:
-        available_types = []
-
-    if not available_types:
-        available_types = ["phishing", "payment_fraud", "campus_sale", "job_scam", "domain_spoofing"]
-
-    _selected_types = st.sidebar.multiselect(
-        "Select scam type(s)",
-        options=available_types,
-        default=[available_types[0]] if available_types else [],
-    )
-
-    st.sidebar.subheader("Counts per selected type")
-
-    # -------------------------
-    # Per-type unique counts
-    # -------------------------
-    per_type_counts = {}
-    for scam_type in _selected_types:
-        per_type_counts[scam_type] = st.sidebar.number_input(
-            f"{scam_type} count",
-            min_value=0,
-            max_value=500,
-            value=0,
-            step=1,
-            key=f"count_{scam_type}",
-        )
-
-    # -------------------------
-    # Session state for persistence across reruns
-    # -------------------------
-    if "ae_last_result" not in st.session_state:
-        st.session_state.ae_last_result = None
-    if "ae_last_alerts" not in st.session_state:
-        st.session_state.ae_last_alerts = None
-    if "ae_last_error" not in st.session_state:
-        st.session_state.ae_last_error = None
-
-    # -------------------------
-    # Run engine on click
-    # -------------------------
-    if st.sidebar.button("Inbox"):
-        st.session_state.ae_last_error = None
-        try:
-            engine = AlertEngine(threshold=int(_threshold))
-
-            # Feed events based on per-type counts
-            last_result = None
-            for scam_type, n in per_type_counts.items():
-                for _ in range(int(n)):
-                    last_result = engine.add_event([scam_type])
-
-            st.session_state.ae_last_result = last_result
-            st.session_state.ae_last_alerts = engine.get_all_alerts()
-
-            # Send alerts immediately if requested
-            if _send and st.session_state.ae_last_alerts:
-                for k, v in st.session_state.ae_last_alerts.items():
-                    try:
-                        engine.send_alert(k, v)
-                    except Exception as e:
-                        st.sidebar.error(f"send_alert failed for {k}: {type(e).__name__}: {e}")
-
-        except Exception as e:
-            st.session_state.ae_last_error = f"{type(e).__name__}: {e}"
-
-    # -------------------------
-    # Display results: ALERTS ONLY (counts >= threshold)
-    # -------------------------
-    if st.session_state.ae_last_error:
-        st.sidebar.error(f"Inbox failed: {st.session_state.ae_last_error}")
-
-    result = st.session_state.ae_last_result
-    alerts = st.session_state.ae_last_alerts
-
-    st.sidebar.write("**Alerts (count ≥ threshold):**")
-    if alerts:
-        for k, v in alerts.items():
-            st.sidebar.write(f"- {k}: {v}")
-        st.sidebar.success("Alerts triggered")
-    else:
-        # Only show this after at least one run
-        if result is not None or st.session_state.ae_last_error is not None:
-            st.sidebar.info("No alerts triggered")
-
-except Exception as e:
-    st.sidebar.error(f"AlertEngine integration failed: {type(e).__name__}: {e}")
-    raise
