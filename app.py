@@ -9,6 +9,14 @@ from pathlib import Path
 from PIL import Image
 from src.utils import analyze_image_for_scams, analyze_text_for_scams
 
+# Database integration
+try:
+    from database.database import ScamDatabase, ScamRecord
+    _db = ScamDatabase()
+except Exception:
+    _db = None
+
+
 # Page config + styling
 # -----------------------------
 st.set_page_config(
@@ -109,14 +117,139 @@ def load_alerts():
 
 
 def save_alert(entry: dict):
-    p = _scams_file_path()
-    items = load_alerts()
-    items.insert(0, entry)
-    p.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
+    """Save an alert locally and to the ScamDatabase if available.
+
+    Keeps the existing local JSON storage for compatibility but will also add
+    a record to the `ScamDatabase` when the `database` package is importable.
+    """
+    # First, try to persist to the ScamDatabase (preferred)
+    try:
+        if _db is not None:
+            # Map entry to ScamRecord fields where available
+            rec = ScamRecord(
+                timestamp=entry.get("timestamp", now_iso()),
+                scam_types=entry.get("scam_types", []),
+                scam_score=int(entry.get("score", 0) or 0),
+                confidence=float(entry.get("confidence", 0.0) or 0.0),
+            )
+            added = _db.add_record(rec)
+            if added:
+                # also keep legacy JSON file for backwards compatibility
+                try:
+                    p = _scams_file_path()
+                    items = load_alerts()
+                    items.insert(0, entry)
+                    p.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
+                except Exception:
+                    pass
+                return True
+    except Exception:
+        # fall through to legacy behavior
+        pass
+
+    # Legacy JSON fallback
+    try:
+        p = _scams_file_path()
+        items = load_alerts()
+        items.insert(0, entry)
+        p.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
+def show_db_contents():
+    """Display the current database contents in the Streamlit UI.
+
+    If a ScamDatabase is available, read from it; otherwise fall back to the
+    legacy JSON storage used by load_alerts().
+    """
+    try:
+        #st.subheader("Stored reports (database)")
+        if _db is not None:
+            records = _db.get_all_records()
+            # ScamRecord -> dict
+            recs = []
+            for r in records:
+                try:
+                    recs.append(r.to_dict())
+                except Exception:
+                    # already a dict
+                    recs.append(r)
+            #st.json(recs)
+        else:
+            recs = load_alerts()
+            #st.json(recs)
+    except Exception as e:
+        st.error(f"Failed to load DB records: {e}")
+
+
+def _get_all_records_as_dicts():
+    """Return all stored records as a list of dicts (DB or legacy JSON)."""
+    try:
+        if _db is not None:
+            return [r.to_dict() if hasattr(r, "to_dict") else r for r in _db.get_all_records()]
+        return load_alerts()
+    except Exception:
+        return []
+
+
+def check_and_notify_threshold(entry: dict, threshold: int = 5):
+    """Check counts for scam types and notify if any exceed threshold.
+
+    Uses session_state to avoid repeating the same alert for a scam type.
+    """
+    try:
+        if "threshold_alerts_shown" not in st.session_state:
+            st.session_state["threshold_alerts_shown"] = set()
+
+        records = _get_all_records_as_dicts()
+        # Count occurrences per scam type
+        counts = {}
+        for r in records:
+            for t in (r.get("scam_types") or []):
+                counts[t] = counts.get(t, 0) + 1
+
+        triggered = []
+        for t, cnt in counts.items():
+            if cnt > threshold and t not in st.session_state["threshold_alerts_shown"]:
+                triggered.append((t, cnt))
+
+        if triggered:
+            # Mark them as shown so we don't repeat
+            for t, _ in triggered:
+                st.session_state["threshold_alerts_shown"].add(t)
+
+            # ensure inbox exists in session state
+            if "inbox_alerts" not in st.session_state:
+                st.session_state["inbox_alerts"] = []
+
+            # add each triggered alert into the inbox (type, count, timestamp)
+            for t, c in triggered:
+                st.session_state["inbox_alerts"].append({
+                    "type": t,
+                    "count": c,
+                    "timestamp": now_iso(),
+                })
+
+            # Render a prominent banner and an expanding detail box
+            msgs = "".join([f"<li><strong>{t}</strong>: {c} reports</li>" for t, c in triggered])
+            st.markdown(
+                f"<div class='banner banner-danger'><div style='font-weight:800; font-size:16px;'>Threshold reached</div>\n"
+                f"<div class='small-muted'>The following scam types exceeded the threshold of {threshold} reports:</div>\n"
+                f"<ul style='margin-top:8px'>{msgs}</ul></div>",
+                unsafe_allow_html=True,
+            )
+    except Exception as e:
+        # Non-fatal: show a warning in the sidebar for debugging
+        try:
+            st.sidebar.warning(f"Threshold check failed: {e}")
+        except Exception:
+            pass
 
 
 # Use sidebar `page` radio to control what the main area shows
-tabs = st.tabs(["Report a message", "Active alerts"])
+tabs = st.tabs(["Report a message", "Active alerts", "Inbox"])
 
 with tabs[0]:
     st.title("🚨 Scam Detection Tool")
@@ -187,7 +320,7 @@ with tabs[0]:
                 
                 with image_col:
                     st.subheader("Uploaded Image")
-                    st.image(image, use_container_width=True)
+                    st.image(image, use_column_width=True)
                 
                 # Bottom: OCR Confidence
                 st.subheader("OCR Confidence")
@@ -207,10 +340,13 @@ with tabs[0]:
                     "scam_types": list(result["scam_types"]) if result["scam_types"] else [],
                     "ocr_used": True,
                 }
-                try:
-                    save_alert(entry)
-                except Exception as e:
-                    st.error(f"Failed to save report: {e}")
+                saved = save_alert(entry)
+                if not saved:
+                    st.error("Failed to save report to storage")
+                else:
+                    st.success("Report saved")
+                    show_db_contents()
+                    check_and_notify_threshold(entry, threshold=5)
                 
             else:
                 st.error(f"❌ Analysis Failed: {result['error']}")
@@ -270,11 +406,13 @@ with tabs[0]:
                     "scam_types": list(result["scam_types"]) if result["scam_types"] else [],
                     "ocr_used": False,
                 }
-                try:
-                    save_alert(entry)
+                saved = save_alert(entry)
+                if saved:
                     st.success("Report saved locally to data directory.")
-                except Exception as e:
-                    st.error(f"Failed to save report: {e}")
+                    show_db_contents()
+                    check_and_notify_threshold(entry, threshold=5)
+                else:
+                    st.error("Failed to save report to storage")
             else:
                 st.error(f"❌ Analysis Failed: {result['error']}")
         
@@ -298,6 +436,27 @@ with tabs[1]:
             st.write(a.get("text"))
             render_flags(a.get("flags", []))
             end_card()
+
+
+with tabs[2]:
+    st.header("Inbox")
+    st.markdown("Alerts that were generated when a scam type exceeded the configured threshold.")
+    inbox = st.session_state.get("inbox_alerts", [])
+    if not inbox:
+        st.info("No threshold alerts yet.")
+    else:
+        # show most recent first
+        for it in reversed(inbox):
+            t = it.get("type")
+            c = it.get("count")
+            ts = it.get("timestamp")
+            card(f"{t} — {c} reports", subtitle=ts)
+            st.write(f"Type: **{t}** — Count: **{c}**")
+            end_card()
+
+    if st.button("Clear inbox alerts"):
+        st.session_state["inbox_alerts"] = []
+        st.success("Inbox cleared")
 
 
 # --- AlertEngine Streamlit integration (appended; does not modify existing UI) ---
