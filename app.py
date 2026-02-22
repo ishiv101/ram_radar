@@ -302,7 +302,7 @@ with tabs[0]:
                 
                 with image_col:
                     st.subheader("Uploaded Image")
-                    st.image(image, use_column_width=True)
+                    st.image(image, use_container_width=True)
                 
                 # Bottom: OCR Confidence
                 st.subheader("OCR Confidence")
