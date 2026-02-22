@@ -2,13 +2,7 @@
 
 import streamlit as st
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
-import os
-import json
-from pathlib import Path
-from PIL import Image
-from src.utils import analyze_image_for_scams, analyze_text_for_scams
-
+from typing import Any, Dict, List, Optional
 
 # Page config + styling
 # -----------------------------
@@ -20,27 +14,20 @@ st.set_page_config(
 
 CSS = """
 <style>
-/* Carolina Blue Theme */
-:root {
-  --carolina-dark: #13294B;
-  --carolina-light: #4B9CD3;
-  --carolina-white: #FFFFFF;
-}
-
 /* Layout polish */
 .block-container { padding-top: 1.5rem; padding-bottom: 2.0rem; }
-h1, h2, h3 { letter-spacing: -0.02em; color: #13294B; }
+h1, h2, h3 { letter-spacing: -0.02em; }
 
 /* Card look */
 .card {
-  border: 1px solid rgba(19, 41, 75, 0.2);
+  border: 1px solid rgba(49, 51, 63, 0.15);
   border-radius: 16px;
   padding: 16px 16px;
-  background: rgba(75, 156, 211, 0.05);
+  background: rgba(255,255,255,0.7);
   margin-bottom: 12px;
 }
-.card-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; color: #13294B; }
-.small-muted { color: rgba(19, 41, 75, 0.7); font-size: 13px; }
+.card-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.small-muted { color: rgba(49,51,63,0.65); font-size: 13px; }
 
 /* Badges */
 .badge {
@@ -48,31 +35,30 @@ h1, h2, h3 { letter-spacing: -0.02em; color: #13294B; }
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
-  border: 1px solid rgba(19, 41, 75, 0.2);
+  border: 1px solid rgba(49, 51, 63, 0.15);
   margin: 4px 6px 0 0;
 }
-.badge-red { background: rgba(222, 53, 53, 0.15); color: #8B0000; }
-.badge-yellow { background: rgba(255, 193, 7, 0.15); color: #FF6B00; }
-.badge-green { background: rgba(75, 156, 211, 0.15); color: #13294B; }
-.badge-gray { background: rgba(75, 156, 211, 0.1); color: #13294B; }
+.badge-red { background: rgba(255, 227, 227, 0.9); }
+.badge-yellow { background: rgba(255, 243, 191, 0.9); }
+.badge-green { background: rgba(211, 249, 216, 0.9); }
+.badge-gray { background: rgba(241, 243, 245, 0.9); }
 
 /* Risk pill */
 .risk-pill {
   display:inline-block; padding:6px 10px; border-radius:999px;
-  font-weight:700; font-size:12px; border:1px solid rgba(19,41,75,0.2);
-  background: rgba(75, 156, 211, 0.1); color: #13294B;
+  font-weight:700; font-size:12px; border:1px solid rgba(49,51,63,0.15);
 }
 
 /* Top alert banner */
 .banner {
   border-radius: 16px;
   padding: 14px 16px;
-  border: 1px solid rgba(19, 41, 75, 0.2);
+  border: 1px solid rgba(49, 51, 63, 0.15);
   margin-bottom: 16px;
 }
-.banner-danger { background: rgba(222, 53, 53, 0.1); border-left: 4px solid #DE3535; }
-.banner-info { background: rgba(75, 156, 211, 0.1); border-left: 4px solid #4B9CD3; }
-.banner-ok { background: rgba(75, 156, 211, 0.15); border-left: 4px solid #13294B; }
+.banner-danger { background: rgba(255, 227, 227, 0.7); }
+.banner-info { background: rgba(231, 245, 255, 0.7); }
+.banner-ok { background: rgba(211, 249, 216, 0.7); }
 
 /* Button row */
 .btnrow { display:flex; gap:8px; flex-wrap: wrap; }
@@ -140,8 +126,16 @@ def end_card():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# Top header (no sidebar)
-st.markdown("## 🚨 Ram Radar")
+# Top header + viewer id input (no sidebar)
+import os
+import json
+from pathlib import Path
+from PIL import Image
+cols = st.columns([3, 1])
+with cols[0]:
+    st.markdown("## 🚨 Ram Radar")
+with cols[1]:
+    viewer_id = st.text_input("Viewer ID", value="anon_viewer")
 st.markdown("---")
 
 
@@ -155,6 +149,62 @@ try:
     import src.config as cfg
 except Exception:
     import config as cfg
+
+
+def analyze_text_simple(text: str):
+    """Lightweight scam scoring using configured keyword lists.
+
+    Returns (score:int, flags:List[str])
+    """
+    t = text.lower()
+    score = 0
+    flags = []
+
+    for word in getattr(cfg, "PHISHING_KEYWORDS", []):
+        if word in t:
+            score += cfg.WEIGHTS.get("phishing", 10)
+            flags.append(f"Phishing phrase detected: '{word}'")
+
+    payment_found = False
+    for word in getattr(cfg, "PAYMENT_KEYWORDS", []):
+        if word in t:
+            score += cfg.WEIGHTS.get("payment", 15)
+            payment_found = True
+            flags.append(f"Peer-to-peer payment mention: '{word}'")
+
+    sale_found = False
+    for word in getattr(cfg, "CAMPUS_SALE_KEYWORDS", []):
+        if word in t:
+            score += cfg.WEIGHTS.get("campus_sale", 5)
+            sale_found = True
+            flags.append(f"Campus sale keyword: '{word}'")
+
+    if sale_found and payment_found:
+        score += cfg.WEIGHTS.get("sale_payment_bonus", 10)
+        flags.append("High-risk combo: Sale + P2P payment")
+
+    for word in getattr(cfg, "JOB_SCAM_KEYWORDS", []):
+        if word in t:
+            score += cfg.WEIGHTS.get("job", 10)
+            flags.append(f"Job scam phrase: '{word}'")
+
+    for domain in getattr(cfg, "SUSPICIOUS_DOMAINS", []):
+        if domain in t:
+            score += cfg.WEIGHTS.get("suspicious_domain", 20)
+            flags.append(f"Spoofed domain detected: '{domain}'")
+
+    if "http" in t or "bit.ly" in t or "tinyurl" in t:
+        score += cfg.WEIGHTS.get("link", 10)
+        flags.append("Contains external or shortened link")
+
+    for w in ["urgent", "immediately", "asap", "act now"]:
+        if w in t:
+            score += cfg.WEIGHTS.get("urgency", 5)
+            flags.append(f"Urgency language detected: '{w}'")
+
+    score = min(100, score)
+    return score, flags
+
 
 def _scams_file_path() -> Path:
     d = Path(getattr(cfg, "DATA_DIR", "data"))
@@ -183,172 +233,59 @@ def save_alert(entry: dict):
 tabs = st.tabs(["Report a message", "Active alerts"])
 
 with tabs[0]:
-    st.title("🚨 Scam Detection Tool")
-    st.write("Upload an image of a potential scam message to analyze it for suspicious content.")
+    st.header("Report a message")
+    st.markdown("Use this tab to paste suspicious message text or upload a screenshot.")
 
-    use_gpu = False  # GPU acceleration disabled by default
+    with st.form("report_form"):
+        provided_text = st.text_area("Message text (paste or leave empty to OCR an image)", height=200)
+        uploaded = st.file_uploader("Screenshot (optional)", type=["png", "jpg", "jpeg"])
+        use_gpu = st.checkbox("Use GPU for OCR (if available)", value=False)
+        submitted = st.form_submit_button("Analyze")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Upload Image")
-        uploaded_file = st.file_uploader(
-            "Choose an image file",
-            type=["jpg", "jpeg", "png", "bmp", "gif"]
-        )
-
-    with col2:
-        st.subheader("Paste Message Text")
-        text_input = st.text_area(
-            "Enter suspicious message text to analyze",
-            placeholder="Paste the scam message text here...",
-            height=150,
-            key="text_input_col"
-        )
-        analyze_text_btn = st.button("Analyze Text", key="analyze_text_btn_col")
-
-    if uploaded_file is not None:
-        try:
-            # Save temporarily
-            image = Image.open(uploaded_file)
-            temp_path = f"/tmp/{uploaded_file.name}"
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            # Analyze with spinner right under input columns
-            with st.spinner("Analyzing image..."):
-                result = analyze_image_for_scams(temp_path, use_gpu=use_gpu)
-            
-            if result["success"]:
-                # Two-column layout: Results (left) | Image (right)
-                result_col, image_col = st.columns([1.5, 1])
-                
-                with result_col:
-                    # Scam Score
-                    score = result["scam_score"]
-                    if score >= 70:
-                        risk_level = "HIGH RISK"
-                    elif score >= 40:
-                        risk_level = "MEDIUM RISK"
-                    else:
-                        risk_level = "LOW RISK"
-                    
-                    st.metric("Scam Score", f"{score}/100", delta=risk_level)
-                    
-                    # Scam Types
-                    st.subheader("Scam Type(s)")
-                    scam_types = result["scam_types"]
-                    types_text = ", ".join(scam_types) if scam_types else "None detected"
-                    st.write(types_text)
-                    
-                    # Detected Red Flags
-                    st.subheader("Detected Red Flags")
-                    if result["flags"]:
-                        for flag in result["flags"]:
-                            st.warning(f"⚠️ {flag}")
-                    else:
-                        st.info("No suspicious indicators detected.")
-                
-                with image_col:
-                    st.subheader("Uploaded Image")
-                    st.image(image, use_container_width=True)
-                
-                # Bottom: OCR Confidence
-                st.subheader("OCR Confidence")
-                st.progress(result["confidence"], text=f"{result['confidence']:.1%}")
-                
-                # Extracted Text
-                st.subheader("Extracted Text")
-                st.text_area("Text from image:", value=result["extracted_text"], height=150, disabled=True)
-                
-                # Save to alerts
-                entry = {
-                    "viewer_id": "anon_viewer",
-                    "timestamp": now_iso(),
-                    "text": result["extracted_text"],
-                    "score": result["scam_score"],
-                    "flags": result["flags"],
-                    "scam_types": list(result["scam_types"]) if result["scam_types"] else [],
-                    "ocr_used": True,
-                }
-                try:
-                    save_alert(entry)
-                except Exception as e:
-                    st.error(f"Failed to save report: {e}")
-                
-            else:
-                st.error(f"❌ Analysis Failed: {result['error']}")
-        
-        except Exception as e:
-            st.error(f"Error during analysis: {str(e)}")
-            import traceback
-            st.text(traceback.format_exc())
-
-    # Handle text input analysis from col2
-    if analyze_text_btn and text_input.strip():
-        try:
-            with st.spinner("Analyzing text..."):
-                result = analyze_text_for_scams(text_input)
-            
-            if result["success"]:
-                st.divider()
-                st.subheader("Results")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    score = result["scam_score"]
-                    if score >= 70:
-                        risk_level = "HIGH RISK"
-                    elif score >= 40:
-                        risk_level = "MEDIUM RISK"
-                    else:
-                        risk_level = "LOW RISK"
-                    
-                    st.metric("Scam Score", f"{score}/100", delta=risk_level)
-                
-                with col2:
-                    scam_types = result["scam_types"]
-                    types_text = ", ".join(scam_types) if scam_types else "None detected"
-                    st.metric("Scam Type(s)", types_text)
-                
-                # Analyzed Text
-                st.subheader("Analyzed Text")
-                st.text_area("Input text:", value=text_input, height=150, disabled=True, key="analyzed_text")
-                
-                # Detected Flags
-                if result["flags"]:
-                    st.subheader("Detected Red Flags")
-                    for flag in result["flags"]:
-                        st.warning(f"⚠️ {flag}")
+    if submitted:
+        text_to_analyze = (provided_text or "").strip()
+        ocr_used = False
+        if uploaded and not text_to_analyze:
+            try:
+                # try using the project's OCR if available
+                from src.ocr_extractor import ImageToText
+                img = Image.open(uploaded).convert("RGB")
+                ocr = ImageToText(gpu=use_gpu)
+                res = ocr.extract_text(img)
+                if res.get("success"):
+                    text_to_analyze = res.get("text", "").strip()
+                    ocr_used = True
                 else:
-                    st.info("No suspicious indicators detected.")
-                
-                # Save to alerts
-                entry = {
-                    "viewer_id": "anon_viewer",
-                    "timestamp": now_iso(),
-                    "text": text_input,
-                    "score": result["scam_score"],
-                    "flags": result["flags"],
-                    "scam_types": list(result["scam_types"]) if result["scam_types"] else [],
-                    "ocr_used": False,
-                }
-                try:
-                    save_alert(entry)
-                    st.success("Report saved locally to data directory.")
-                except Exception as e:
-                    st.error(f"Failed to save report: {e}")
-            else:
-                st.error(f"❌ Analysis Failed: {result['error']}")
-        
-        except Exception as e:
-            st.error(f"Error during analysis: {str(e)}")
-            import traceback
-            st.text(traceback.format_exc())
+                    st.warning("OCR returned no usable text: " + str(res.get("error", "unknown")))
+            except Exception as e:
+                st.warning(f"OCR unavailable or failed: {e}")
 
-    st.divider()
-    st.caption("This tool analyzes images and text for common scam indicators including phishing, payment fraud, and job scams.")
+        if not text_to_analyze:
+            st.warning("Please provide message text or upload a readable screenshot.")
+        else:
+            score, flags = analyze_text_simple(text_to_analyze)
+            lbl = risk_label(score)
+            kind = "danger" if score >= 70 else "info" if score >= 40 else "ok"
+            banner(kind, f"Risk: {lbl['label']} — {score}", f"Analyzed at {now_iso()}")
+            st.subheader("Extracted / Provided text")
+            st.write(text_to_analyze)
+            st.subheader("Detected flags")
+            render_flags(flags)
+
+            # persist locally
+            entry = {
+                "viewer_id": viewer_id,
+                "timestamp": now_iso(),
+                "text": text_to_analyze,
+                "score": score,
+                "flags": flags,
+                "ocr_used": ocr_used,
+            }
+            try:
+                save_alert(entry)
+                st.success("Report saved locally to data directory.")
+            except Exception as e:
+                st.error(f"Failed to save report: {e}")
 
 with tabs[1]:
     st.header("Active alerts")
@@ -363,7 +300,36 @@ with tabs[1]:
             render_flags(a.get("flags", []))
             end_card()
 
+import time
 
+# --- Continuous polling for alerts ---
+if "last_alert_check" not in st.session_state:
+    st.session_state.last_alert_check = 0
+if "active_popup" not in st.session_state:
+    st.session_state.active_popup = None
+
+POLL_INTERVAL_SEC = 5  # adjust as needed
+
+def check_for_alert():
+    alerts = load_alerts()
+    if alerts:
+        latest = alerts[0]
+        # Example: show popup if score is high
+        if latest.get("score", 0) >= 70:
+            return f"🚨 High risk alert: {latest.get('text', '')[:100]}"
+    return None
+
+if time.time() - st.session_state.last_alert_check > POLL_INTERVAL_SEC:
+    st.session_state.last_alert_check = time.time()
+    popup_msg = check_for_alert()
+    if popup_msg:
+        st.session_state.active_popup = popup_msg
+        st.experimental_rerun()
+
+if st.session_state.active_popup:
+    st.toast(st.session_state.active_popup)  # Use st.warning(...) if st.toast is unavailable
+
+"""
 # --- AlertEngine Streamlit integration (appended; does not modify existing UI) ---
 try:
     import importlib
@@ -479,3 +445,5 @@ try:
 except Exception as e:
     st.sidebar.error(f"AlertEngine integration failed: {type(e).__name__}: {e}")
     raise
+
+"""

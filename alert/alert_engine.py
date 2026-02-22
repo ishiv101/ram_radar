@@ -79,7 +79,7 @@ class AlertEngine:
         timestamp = datetime.now().isoformat()
         alert_message = (
             f"[{timestamp}] ALERT: {scam_type.upper()} scams detected! "
-            f"Total reports: {count} (threshold: {self.threshold})"
+            f"Total reports: {count}"
         )
         print(alert_message)
 
